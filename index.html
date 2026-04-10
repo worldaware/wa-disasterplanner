@@ -1,0 +1,2130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Aware — Disaster Plan Builder</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#FF6B35', navy: '#1A2238',
+            'brand-light': '#FFF0EB', 'brand-dark': '#E5541A',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F4F6F9; }
+    .input { width:100%; border:1.5px solid #D1D5DB; border-radius:8px; padding:10px 14px; font-size:14px; color:#1A2238; outline:none; transition:border-color .15s,box-shadow .15s; background:#fff; }
+    .input:focus { border-color:#FF6B35; box-shadow:0 0 0 3px rgba(255,107,53,.12); }
+    select.input { background:#fff; cursor:pointer; }
+    .btn-primary  { background:#FF6B35; color:#fff; font-weight:600; padding:11px 28px; border-radius:8px; border:none; cursor:pointer; font-size:15px; transition:background .15s,transform .1s; }
+    .btn-primary:hover    { background:#E5541A; }
+    .btn-primary:active   { transform:scale(.98); }
+    .btn-primary:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+    .btn-secondary { background:#fff; color:#1A2238; font-weight:600; padding:11px 24px; border-radius:8px; border:1.5px solid #D1D5DB; cursor:pointer; font-size:15px; transition:all .15s; }
+    .btn-secondary:hover { border-color:#FF6B35; color:#FF6B35; }
+    .card  { background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.04); border:1px solid #E5E7EB; }
+    .label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }
+    .error-msg  { color:#DC2626; font-size:12px; margin-top:4px; }
+    .saved-badge { display:inline-flex; align-items:center; gap:6px; background:#ECFDF5; color:#065F46; font-size:12px; font-weight:600; padding:4px 12px; border-radius:999px; border:1px solid #A7F3D0; }
+    @keyframes pulse-ring { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse { animation: pulse-ring 1.5s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media print {
+      body > * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 24px; }
+      .print-hidden { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// ── Storage (multi-plan) ─────────────────────────────────────────────────────
+const DB_KEY = 'wa_plans_v1';
+function dbLoad() { try { const r = localStorage.getItem(DB_KEY); return r ? JSON.parse(r) : { plans: [] }; } catch { return { plans: [] }; } }
+function dbSave(db) { try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch {} }
+function dbSavePlan(plan) { const db = dbLoad(); const idx = db.plans.findIndex(p => p.id === plan.id); if(idx>=0) db.plans[idx]=plan; else db.plans.push(plan); dbSave(db); }
+function dbDeletePlan(id) { const db = dbLoad(); db.plans = db.plans.filter(p => p.id !== id); dbSave(db); }
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const INDUSTRIES    = ['Manufacturing','Technology','Biotech / Life Sciences','Professional Services','Retail / E-Commerce','Healthcare','Financial Services','Logistics / Transportation','Construction / Real Estate','Education','Other'];
+const EMP_RANGES    = ['1–10','11–50','51–200','201–500','501–1,000','1,001–5,000','5,000+'];
+const LOC_RANGES    = ['1','2–3','4–10','11–25','26+'];
+const CRIT_REASONS  = ['Revenue generation','Regulatory requirement','Customer commitment','Safety / life safety','Legal obligation','Core product delivery'];
+const DOWNTIME_OPTS = ['2 hours','4 hours','8 hours','24 hours','3 days','7 days','30 days'];
+
+const HAZARD_LIST = [
+  {id:'fire',          name:'Fire',                      icon:'🔥', cat:'Natural / Physical'},
+  {id:'flood',         name:'Flood',                     icon:'🌊', cat:'Natural / Physical'},
+  {id:'earthquake',    name:'Earthquake',                icon:'🌍', cat:'Natural / Physical'},
+  {id:'tornado',       name:'Tornado / Severe Storm',    icon:'🌪️', cat:'Natural / Physical'},
+  {id:'cyber',         name:'Cyber Attack / Ransomware', icon:'💻', cat:'Technological'},
+  {id:'power',         name:'Power Outage',              icon:'⚡', cat:'Technological'},
+  {id:'it-failure',    name:'IT System Failure',         icon:'🖥️', cat:'Technological'},
+  {id:'supply',        name:'Supply Chain Disruption',   icon:'🔗', cat:'Operational'},
+  {id:'key-person',    name:'Key Personnel Loss',        icon:'👤', cat:'Operational'},
+  {id:'pandemic',      name:'Pandemic / Disease',        icon:'🦠', cat:'Health'},
+  {id:'active-shooter',name:'Active Shooter / Violence', icon:'🚨', cat:'Security'},
+  {id:'data-breach',   name:'Data Breach',               icon:'🔓', cat:'Technological'},
+];
+const CATS = [...new Set(HAZARD_LIST.map(h => h.cat))];
+
+const L_LABELS = ['Rare','Unlikely','Possible','Likely','Almost Certain'];
+const I_LABELS = ['Insignificant','Minor','Moderate','Major','Catastrophic'];
+
+// Phase 3 constants
+const REQUIRED_SECTIONS = [
+  { id:'exec-summary',  label:'Executive Summary',       desc:'High-level overview of the plan, key risks, and recovery priorities.' },
+  { id:'introduction',  label:'Introduction & Purpose',  desc:'Plan scope, objectives, assumptions, and how to use this document.' },
+  { id:'situation',     label:'Situation Overview',      desc:'Organization profile, critical functions, and current preparedness status.' },
+  { id:'comms',         label:'Communications',          desc:'Notification procedures, contact lists, and stakeholder messaging.' },
+  { id:'training',      label:'Training & Maintenance',  desc:'Exercise schedule, plan review cycle, and staff training requirements.' },
+];
+
+const ANNEXES = [
+  { id:'natural',      title:'Natural Disasters',                   subtitle:'Fire, flood, earthquake, severe weather procedures',           icon:'🌪️', triggers:['fire','flood','earthquake','tornado'] },
+  { id:'cyber-it',     title:'Cyber Incidents & IT Failure',        subtitle:'Ransomware, data breach, system outage, IT recovery',          icon:'💻', triggers:['cyber','it-failure','data-breach','power'] },
+  { id:'violence',     title:'Active Shooter / Workplace Violence',  subtitle:'Security incidents, lockdown, and evacuation procedures',       icon:'🚨', triggers:['active-shooter'] },
+  { id:'key-person',   title:'Leadership Loss / Key Personnel',      subtitle:'Succession planning and knowledge transfer protocols',          icon:'👤', triggers:['key-person'] },
+  { id:'pandemic',     title:'Pandemic Response',                    subtitle:'Disease outbreak and public health emergency procedures',        icon:'🦠', triggers:['pandemic'] },
+  { id:'supply-chain', title:'Supply Chain Disruption',             subtitle:'Vendor failure, procurement continuity, and alternate sourcing', icon:'🔗', triggers:['supply'] },
+];
+
+function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2,6)}`; }
+function score(r)  { return r.likelihood * r.impact; }
+function levelOf(s){ if(s>=15)return{label:'Critical',bg:'#FEE2E2',text:'#991B1B',border:'#FCA5A5'}; if(s>=10)return{label:'High',bg:'#FFEDD5',text:'#9A3412',border:'#FDBA74'}; if(s>=5)return{label:'Medium',bg:'#FEF9C3',text:'#854D0E',border:'#FDE047'}; return{label:'Low',bg:'#DCFCE7',text:'#166534',border:'#86EFAC'}; }
+function cellColor(l,i){ const s=l*i; if(s>=15)return'#EF4444'; if(s>=10)return'#F97316'; if(s>=5)return'#EAB308'; return'#22C55E'; }
+
+// Smart annex recommendation based on HIGH/CRITICAL risks (score ≥ 10)
+function computeRecommended(risks) {
+  const highIds = new Set(risks.filter(r => score(r) >= 10).map(r => r.id));
+  return ANNEXES.filter(a => a.triggers.some(t => highIds.has(t))).map(a => a.id);
+}
+
+const INIT_FN = () => ({ id: uid(), name: '', reason: '', downtime: '' });
+const TODAY = new Date().toISOString().slice(0, 10);
+const INIT = {
+  profile:      { companyName:'', industry:'', employees:'', locations:'', address:'' },
+  functions:    [INIT_FN()],
+  preparedness: { hasExistingPlan:null, hasBackupPower:null, remoteWork:'', hasOffsiteBackup:null },
+  risks:        [],
+  selectedHazardIds: [],
+  customHazards:     [],
+  config: {
+    selectedAnnexes: [],
+    consultantName:    '',
+    consultantCompany: 'World Aware',
+    planVersion:       '1.0',
+    planDate:          TODAY,
+  },
+};
+
+function newPlan() {
+  return {
+    id: uid(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    profile:      { companyName:'', industry:'', employees:'', locations:'', address:'' },
+    functions:    [INIT_FN()],
+    preparedness: { hasExistingPlan:null, hasBackupPower:null, remoteWork:'', hasOffsiteBackup:null },
+    risks:        [],
+    selectedHazardIds: [],
+    customHazards:     [],
+    config: {
+      selectedAnnexes: [],
+      consultantName:    '',
+      consultantCompany: 'World Aware',
+      planVersion:       '1.0',
+      planDate:          TODAY,
+    },
+  };
+}
+
+// ── Shared UI ────────────────────────────────────────────────────────────────
+function Field({ label, required, error, hint, tooltip, children }) {
+  return (
+    <div>
+      <label className="label">{label}{required && <span className="text-red-500 ml-0.5">*</span>}{tooltip && <Tooltip text={tooltip}/>}</label>
+      {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
+      {children}
+      {error && <p className="error-msg">{error}</p>}
+    </div>
+  );
+}
+function TInput({ value, onChange, placeholder, ...r }) { return <input className="input" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} {...r} />; }
+function Select({ value, onChange, options, placeholder = 'Select…' }) { return <select className="input" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>; }
+function YesNo({ value, onChange, opts }) {
+  const o = opts || [{ label:'Yes', value:'yes' }, { label:'No', value:'no' }];
+  return <div className="flex gap-3 flex-wrap">{o.map(op => <button key={op.value} type="button" onClick={() => onChange(op.value)} className={`px-5 py-2.5 rounded-lg font-semibold text-sm border-2 transition-all ${value === op.value ? 'border-brand bg-brand-light text-brand' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'}`}>{op.label}</button>)}</div>;
+}
+function Checkbox({ checked, onChange, children }) {
+  return (
+    <button type="button" onClick={() => onChange(!checked)} className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${checked ? 'border-brand bg-brand-light' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${checked ? 'bg-brand border-brand' : 'border-gray-300'}`}>
+        {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+      </div>
+      {children}
+    </button>
+  );
+}
+
+function Tooltip({ text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex items-center ml-1 align-middle">
+      <button type="button" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
+        onClick={e => { e.preventDefault(); setShow(s => !s); }}
+        className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold flex items-center justify-center hover:bg-brand hover:text-white transition-all flex-shrink-0"
+        aria-label="Help">?</button>
+      {show && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-navy text-white text-xs rounded-lg p-2.5 shadow-xl z-50 leading-relaxed font-normal normal-case tracking-normal pointer-events-none" style={{whiteSpace:'normal'}}>
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0" style={{borderLeft:'5px solid transparent',borderRight:'5px solid transparent',borderTop:'5px solid #1A2238'}}/>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function WorldAwareFooter() {
+  return (
+    <footer className="bg-navy text-center py-4 px-4 mt-auto">
+      <p className="text-white/40 text-xs">
+        <span className="font-semibold text-white/60">World Aware</span>
+        {' · '}
+        <a href="https://beworldaware.com" target="_blank" rel="noopener noreferrer" className="text-brand hover:text-brand-dark underline transition-colors">beworldaware.com</a>
+        {' · '}
+        Disaster Plan Builder
+      </p>
+    </footer>
+  );
+}
+
+// ── Phase / Step indicators ──────────────────────────────────────────────────
+function PhaseBar({ phase }) {
+  const phases = [{n:1,label:'Client Intake'},{n:2,label:'Risk Assessment'},{n:3,label:'Plan Config'}];
+  return (
+    <div className="flex items-center gap-1 text-xs font-semibold">
+      {phases.map((p, i) => (
+        <React.Fragment key={p.n}>
+          {i > 0 && <div className={`w-5 h-0.5 ${phase >= p.n ? 'bg-brand' : 'bg-gray-600'}`}/>}
+          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all ${phase === p.n ? 'bg-brand text-white' : phase > p.n ? 'bg-green-500 text-white' : 'bg-white/10 text-white/40'}`}>
+            {phase > p.n ? '✓' : p.n} <span className="hidden sm:inline">{p.label}</span>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+function StepDots({ total, current }) {
+  return (
+    <div className="flex items-center gap-2 justify-center">
+      {Array.from({length: total}).map((_, i) => (
+        <div key={i} className={`rounded-full transition-all ${i === current ? 'w-5 h-2 bg-brand' : i < current ? 'w-2 h-2 bg-green-400' : 'w-2 h-2 bg-gray-200'}`}/>
+      ))}
+    </div>
+  );
+}
+
+// ── PHASE 1 ──────────────────────────────────────────────────────────────────
+const P1_LABELS = ['Company Profile','Critical Functions','Preparedness','Review'];
+
+function StepProfile({ data, onChange, errors }) {
+  const f = k => v => onChange({[k]: v});
+  return (
+    <div className="space-y-5">
+      <div><h2 className="text-xl font-bold text-navy">Company Profile</h2><p className="text-gray-500 text-sm mt-1">Tell us about your organization so we can tailor your disaster plan.</p></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Company Name" required error={errors.companyName} tooltip="The legal or operating name of the client organization. This appears on the cover page and throughout the generated plan."><TInput value={data.companyName} onChange={f('companyName')} placeholder="Acme Corporation"/></Field>
+        <Field label="Industry / Sector" required error={errors.industry} tooltip="Used to tailor risk recommendations and regulatory references in the plan."><Select value={data.industry} onChange={f('industry')} options={INDUSTRIES} placeholder="Select industry…"/></Field>
+      </div>
+      <Field label="Primary Address"><TInput value={data.address} onChange={f('address')} placeholder="123 Main St, City, State, ZIP"/></Field>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Number of Employees" required error={errors.employees} tooltip="Helps size response procedures and staffing requirements in the plan."><Select value={data.employees} onChange={f('employees')} options={EMP_RANGES} placeholder="Select range…"/></Field>
+        <Field label="Number of Locations" required error={errors.locations} tooltip="Multi-location organizations require additional coordination procedures. Each location may have different hazard profiles."><Select value={data.locations} onChange={f('locations')} options={LOC_RANGES} placeholder="Select range…"/></Field>
+      </div>
+    </div>
+  );
+}
+
+function FnCard({ fn, index, onChange, onRemove, canRemove, error }) {
+  const set = k => v => onChange({...fn, [k]: v});
+  return (
+    <div className={`border-2 rounded-xl p-4 transition-all ${error ? 'border-red-300 bg-red-50' : 'border-gray-100 bg-gray-50 hover:border-brand/30'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Function {index+1}</span>
+        {canRemove && <button onClick={onRemove} className="text-gray-300 hover:text-red-400 text-xl leading-none transition-colors">×</button>}
+      </div>
+      <div className="space-y-3">
+        <Field label="Function Name" required>
+          <TInput value={fn.name} onChange={set('name')} placeholder="e.g. Order processing, Patient care, Financial reporting"/>
+          {error?.name && <p className="error-msg">{error.name}</p>}
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Why it's critical" tooltip="The primary business justification. Used to prioritize recovery efforts and explain the function's importance in the plan."><Select value={fn.reason} onChange={set('reason')} options={CRIT_REASONS} placeholder="Select reason…"/></Field>
+          <Field label="Max tolerable downtime" tooltip="Maximum Tolerable Downtime (MTD) — how long this function can be offline before causing unacceptable harm to the business."><Select value={fn.downtime} onChange={set('downtime')} options={DOWNTIME_OPTS} placeholder="Select timeframe…"/></Field>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepFunctions({ data, onChange, errors }) {
+  return (
+    <div className="space-y-5">
+      <div><h2 className="text-xl font-bold text-navy">Critical Business Functions</h2><p className="text-gray-500 text-sm mt-1">What are the 1–5 functions that <strong>must continue</strong> during a disaster?</p></div>
+      <div className="space-y-3">
+        {data.map((fn, i) => <FnCard key={fn.id} fn={fn} index={i} onChange={u => onChange(data.map((f,j) => j===i?u:f))} onRemove={() => onChange(data.filter((_,j) => j!==i))} canRemove={data.length > 1} error={errors[i]}/>)}
+      </div>
+      {data.length < 5 && <button onClick={() => onChange([...data, INIT_FN()])} className="w-full border-2 border-dashed border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-400 hover:border-brand hover:text-brand transition-all">+ Add another function ({data.length}/5)</button>}
+      {errors._general && <p className="error-msg text-sm">{errors._general}</p>}
+    </div>
+  );
+}
+
+function StepPreparedness({ data, onChange }) {
+  const f = k => v => onChange({[k]: v});
+  const Q = ({ label, sub, val, ok, opts }) => (
+    <div className="py-4 border-b border-gray-100 last:border-0">
+      <div className="mb-3"><p className="text-sm font-semibold text-navy">{label}</p>{sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}</div>
+      <YesNo value={val} onChange={ok} opts={opts}/>
+    </div>
+  );
+  return (
+    <div className="space-y-5">
+      <div><h2 className="text-xl font-bold text-navy">Current Preparedness</h2><p className="text-gray-500 text-sm mt-1">Help us understand what you already have in place — no judgment, just information.</p></div>
+      <div className="card p-0 overflow-hidden">
+        <Q label="Do you have an existing emergency / continuity plan?" sub="Any documented plan for responding to disasters." val={data.hasExistingPlan} ok={f('hasExistingPlan')}/>
+        <Q label="Do you have backup power (generator or UPS)?" sub="Equipment to maintain power at your primary location(s)." val={data.hasBackupPower} ok={f('hasBackupPower')}/>
+        <Q label="Can your employees work remotely?" sub="Technology and policies for remote operations." val={data.remoteWork} ok={f('remoteWork')} opts={[{label:'Yes — all',value:'yes-all'},{label:'Partially',value:'partial'},{label:'No',value:'no'}]}/>
+        <Q label="Do you have offsite or cloud data backups?" sub="Data stored separate from your primary site." val={data.hasOffsiteBackup} ok={f('hasOffsiteBackup')}/>
+      </div>
+      <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800"><strong>Why this matters:</strong> These four items are the most predictive factors in how quickly an organization recovers from a disaster.</div>
+    </div>
+  );
+}
+
+function P1Review({ state }) {
+  const { profile:p, functions:fns, preparedness:pr } = state;
+  const gaps = [pr.hasExistingPlan==='no', pr.hasBackupPower==='no', pr.remoteWork==='no', pr.hasOffsiteBackup==='no'].filter(Boolean).length;
+  const bl = v => v==='yes'||v==='yes-all'?'✅ Yes':v==='partial'?'⚠️ Partially':v==='no'?'❌ No':'—';
+  const Row = ({ l, v }) => !v ? null : <div className="flex gap-3 py-2 border-b border-gray-50 last:border-0 text-sm"><dt className="text-gray-400 w-44 flex-shrink-0">{l}</dt><dd className="text-navy font-medium">{v}</dd></div>;
+  return (
+    <div className="space-y-5">
+      <div><h2 className="text-xl font-bold text-navy">Phase 1 Review</h2><p className="text-gray-500 text-sm mt-1">Confirm your intake data, then continue to the Risk Assessment.</p></div>
+      <div className="card p-5"><h3 className="font-bold text-xs uppercase tracking-widest text-gray-400 mb-3">🏢 Company Profile</h3><dl><Row l="Company" v={p.companyName}/><Row l="Industry" v={p.industry}/><Row l="Address" v={p.address}/><Row l="Employees" v={p.employees}/><Row l="Locations" v={p.locations}/></dl></div>
+      <div className="card p-5"><h3 className="font-bold text-xs uppercase tracking-widest text-gray-400 mb-3">⚙️ Critical Functions</h3><div className="space-y-2">{fns.map((fn,i) => <div key={fn.id} className="bg-gray-50 rounded-lg p-3 text-sm"><div className="font-semibold text-navy">{i+1}. {fn.name}</div>{fn.reason&&<div className="text-gray-500 mt-0.5">Why: {fn.reason}</div>}{fn.downtime&&<div className="text-gray-500">Max downtime: {fn.downtime}</div>}</div>)}</div></div>
+      <div className="card p-5"><h3 className="font-bold text-xs uppercase tracking-widest text-gray-400 mb-3">🛡️ Preparedness</h3><dl><Row l="Existing plan" v={bl(pr.hasExistingPlan)}/><Row l="Backup power" v={bl(pr.hasBackupPower)}/><Row l="Remote work" v={bl(pr.remoteWork)}/><Row l="Offsite backup" v={bl(pr.hasOffsiteBackup)}/></dl></div>
+      {gaps > 0 && <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800"><strong>⚠️ {gaps} preparedness gap{gaps>1?'s':''} identified.</strong> These become priority action items in your plan.</div>}
+    </div>
+  );
+}
+
+// ── PHASE 2 ──────────────────────────────────────────────────────────────────
+function StepHazards({ selected, onChange, custom, onCustom }) {
+  const [inp, setInp] = useState('');
+  const toggle = id => onChange(selected.includes(id) ? selected.filter(x => x!==id) : [...selected, id]);
+  function addCustom() {
+    const name = inp.trim(); if(!name) return;
+    const id = `custom-${uid()}`;
+    onCustom([...custom, {id, name, icon:'⚠️', cat:'Custom', custom:true}]);
+    onChange([...selected, id]);
+    setInp('');
+  }
+  const all = [...HAZARD_LIST, ...custom];
+  return (
+    <div className="space-y-5">
+      <div><h2 className="text-xl font-bold text-navy">Select Hazards to Assess</h2><p className="text-gray-500 text-sm mt-1">Choose every hazard that could realistically affect your organization.</p></div>
+      {selected.length > 0 && <div className="bg-brand-light border border-brand/20 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-brand font-semibold"><span>✓</span>{selected.length} hazard{selected.length!==1?'s':''} selected</div>}
+      {CATS.map(cat => {
+        const hazards = all.filter(h => h.cat === cat); if(!hazards.length) return null;
+        return (
+          <div key={cat}>
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{cat}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {hazards.map(h => {
+                const on = selected.includes(h.id);
+                return (
+                  <button key={h.id} onClick={() => toggle(h.id)} className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?'border-brand bg-brand-light':'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${on?'bg-brand border-brand':'border-gray-300'}`}>{on&&<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}</div>
+                    <span className="text-base">{h.icon}</span>
+                    <span className={`text-sm font-semibold ${on?'text-brand':'text-navy'}`}>{h.name}</span>
+                    {h.custom && <span className="ml-auto text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Custom</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      {custom.length > 0 && (
+        <div>
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Custom</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {custom.map(h => {
+              const on = selected.includes(h.id);
+              return <button key={h.id} onClick={() => toggle(h.id)} className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?'border-brand bg-brand-light':'border-gray-200 bg-white hover:border-gray-300'}`}><div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${on?'bg-brand border-brand':'border-gray-300'}`}>{on&&<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}</div><span>⚠️</span><span className={`text-sm font-semibold ${on?'text-brand':'text-navy'}`}>{h.name}</span></button>;
+            })}
+          </div>
+        </div>
+      )}
+      <div>
+        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Custom Hazard</div>
+        <div className="flex gap-2"><input className="input flex-1" value={inp} onChange={e=>setInp(e.target.value)} placeholder="e.g. Chemical spill, Terrorism, Sabotage…" onKeyDown={e=>e.key==='Enter'&&addCustom()}/><button onClick={addCustom} disabled={!inp.trim()} className="btn-primary whitespace-nowrap" style={{padding:'10px 18px'}}>+ Add</button></div>
+      </div>
+    </div>
+  );
+}
+
+function RiskMatrix({ risks, onChange, allHazards }) {
+  const [activeId, setActiveId] = useState(null);
+  const [printPreview, setPrintPreview] = useState(false);
+  useEffect(() => {
+    const first = allHazards.find(h => !risks.find(r => r.id===h.id));
+    setActiveId(first ? first.id : allHazards[0]?.id ?? null);
+  }, []);
+
+  function placeRisk(l, i) {
+    if(!activeId) return;
+    const existing = risks.find(r => r.id===activeId);
+    const hazard = allHazards.find(h => h.id===activeId);
+    const next = existing ? risks.map(r => r.id===activeId ? {...r,likelihood:l,impact:i} : r) : [...risks, {id:activeId, name:hazard.name, icon:hazard.icon, likelihood:l, impact:i}];
+    onChange(next);
+    const placed = new Set(next.map(r => r.id));
+    const nextH = allHazards.find(h => !placed.has(h.id) && h.id!==activeId);
+    if(nextH) setActiveId(nextH.id);
+  }
+
+  const placed = new Set(risks.map(r => r.id));
+  const sorted = [...risks].sort((a,b) => score(b)-score(a));
+  const activeHazard = allHazards.find(h => h.id===activeId);
+
+  return (
+    <div className="space-y-6">
+      <div><h2 className="text-xl font-bold text-navy">Risk Assessment Matrix</h2><p className="text-gray-500 text-sm mt-1">Select a hazard below, then click a cell to assign its <strong>Likelihood × Impact</strong> rating.</p></div>
+
+      {/* Hazard pills */}
+      <div>
+        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Hazards — click to select, then click a matrix cell</div>
+        <div className="flex flex-wrap gap-2">
+          {allHazards.map(h => {
+            const r = risks.find(x => x.id===h.id); const isActive = h.id===activeId; const isPlaced = placed.has(h.id);
+            return (
+              <button key={h.id} onClick={() => setActiveId(h.id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${isActive?'border-brand bg-brand text-white shadow-md shadow-brand/30':isPlaced?'border-green-400 bg-green-50 text-green-700':'border-gray-200 bg-white text-gray-600 hover:border-brand/40'}`}>
+                {!isPlaced&&!isActive&&<span className="w-1.5 h-1.5 rounded-full bg-gray-300 pulse"/>}
+                {isPlaced&&!isActive&&<span className="text-green-500 text-xs">✓</span>}
+                <span>{h.icon}</span><span>{h.name}</span>
+                {isPlaced&&r&&<span className={`text-[10px] font-bold ml-0.5 ${isActive?'text-white/80':'text-green-600'}`}>{r.likelihood}×{r.impact}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeHazard && (
+        <div className="flex items-center gap-2 bg-navy text-white rounded-xl px-4 py-3 text-sm font-semibold">
+          <span className="text-base">{activeHazard.icon}</span>
+          <span>Placing: <strong>{activeHazard.name}</strong></span>
+          <span className="ml-auto text-white/50 text-xs">Click a cell →</span>
+        </div>
+      )}
+
+      {/* 5×5 Matrix */}
+      <div className="card p-4 overflow-x-auto">
+        <div className="min-w-[400px]">
+          <div className="flex gap-2 items-stretch">
+            <div className="flex items-center justify-center w-5 flex-shrink-0">
+              <span className="text-[10px] font-bold text-gray-400 tracking-widest uppercase" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>IMPACT ↑</span>
+            </div>
+            <div className="flex-1 flex flex-col gap-1.5">
+              {[5,4,3,2,1].map(impact => (
+                <div key={impact} className="flex gap-1.5 items-stretch">
+                  <div className="w-20 flex-shrink-0 flex items-center justify-end pr-2 text-right">
+                    <div><div className="text-xs font-bold text-gray-500">{impact}</div><div className="text-[9px] text-gray-400 leading-tight">{I_LABELS[impact-1]}</div></div>
+                  </div>
+                  {[1,2,3,4,5].map(likelihood => {
+                    const bg = cellColor(likelihood, impact);
+                    const cellRisks = risks.filter(r => r.likelihood===likelihood && r.impact===impact);
+                    return (
+                      <button key={likelihood} onClick={() => placeRisk(likelihood, impact)}
+                        className="flex-1 relative rounded-lg transition-all duration-150 group"
+                        style={{background:bg, minHeight:60, border:`2px solid ${bg}`}}
+                        onMouseEnter={e=>{if(activeId)e.currentTarget.style.opacity='0.75';}}
+                        onMouseLeave={e=>{e.currentTarget.style.opacity='1';}}
+                        title={`L${likelihood} × I${impact} = ${likelihood*impact}`}
+                      >
+                        <span className="absolute top-1 right-1.5 text-[10px] font-bold text-white/70">{likelihood*impact}</span>
+                        <div className="p-1 pt-4 flex flex-wrap gap-0.5 justify-center">
+                          {cellRisks.map(r => (
+                            <div key={r.id} onClick={e=>{e.stopPropagation();setActiveId(r.id);}} className={`text-[9px] bg-white/25 hover:bg-white/40 rounded px-1 py-0.5 font-semibold text-white cursor-pointer truncate transition-all ${activeId===r.id?'ring-1 ring-white':''}`} style={{maxWidth:52}}>{r.icon} {r.name}</div>
+                          ))}
+                        </div>
+                        {activeId && cellRisks.length===0 && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-white/80 text-xl">+</span></div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+              <div className="flex gap-1.5 mt-1">
+                <div className="w-20 flex-shrink-0"/>
+                {[1,2,3,4,5].map(l => <div key={l} className="flex-1 text-center"><div className="text-xs font-bold text-gray-500">{l}</div><div className="text-[9px] text-gray-400 leading-tight">{L_LABELS[l-1]}</div></div>)}
+              </div>
+              <div className="flex gap-1.5"><div className="w-20 flex-shrink-0"/><div className="flex-1 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">LIKELIHOOD →</div></div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4 mt-3 pt-3 border-t border-gray-100">
+            {[{l:'Low (1–4)',c:'#22C55E'},{l:'Medium (5–9)',c:'#EAB308'},{l:'High (10–14)',c:'#F97316'},{l:'Critical (15–25)',c:'#EF4444'}].map(({l,c}) => <div key={l} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{background:c}}/><span className="text-xs text-gray-500">{l}</span></div>)}
+          </div>
+        </div>
+      </div>
+
+      {/* Risk register */}
+      {sorted.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <span className="font-bold text-navy">Risk Register</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">{sorted.length} hazard{sorted.length!==1?'s':''} · sorted by priority</span>
+              <button onClick={() => setPrintPreview(true)} className="text-xs text-brand font-semibold hover:underline">🖨️ Print Preview</button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="bg-gray-50 border-b border-gray-100">{['#','Hazard','Likelihood','Impact','Score','Priority',''].map((h,i) => <th key={i} className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>)}</tr></thead>
+              <tbody>
+                {sorted.map((r, i) => {
+                  const s = score(r); const lv = levelOf(s);
+                  return (
+                    <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 text-gray-300 font-bold">{i+1}</td>
+                      <td className="px-4 py-3"><div className="flex items-center gap-2"><span>{r.icon}</span><span className="font-semibold text-navy">{r.name}</span></div></td>
+                      <td className="px-4 py-3 text-center"><span className="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-600">{r.likelihood}</span><div className="text-[10px] text-gray-400 mt-0.5">{L_LABELS[r.likelihood-1]}</div></td>
+                      <td className="px-4 py-3 text-center"><span className="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-600">{r.impact}</span><div className="text-[10px] text-gray-400 mt-0.5">{I_LABELS[r.impact-1]}</div></td>
+                      <td className="px-4 py-3 text-center"><span className="inline-flex w-10 h-8 items-center justify-center rounded-lg font-black text-white text-sm" style={{background:cellColor(r.likelihood,r.impact)}}>{s}</span></td>
+                      <td className="px-4 py-3"><span className="inline-flex px-2.5 py-1 rounded-full text-xs font-bold border" style={{background:lv.bg,color:lv.text,borderColor:lv.border}}>{lv.label}</span></td>
+                      <td className="px-4 py-3"><button onClick={() => { setActiveId(r.id); onChange(risks.filter(x => x.id!==r.id)); }} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2">
+            {[{l:'Critical',min:15},{l:'High',min:10},{l:'Medium',min:5},{l:'Low',min:0}].map(({l,min}) => {
+              const n = sorted.filter(r => {const s=score(r); return l==='Critical'?s>=15:l==='High'?s>=10&&s<15:l==='Medium'?s>=5&&s<10:s<5;}).length;
+              if(!n) return null;
+              const lv = levelOf(l==='Critical'?15:l==='High'?10:l==='Medium'?5:1);
+              return <span key={l} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border" style={{background:lv.bg,color:lv.text,borderColor:'transparent'}}><span className="font-black text-base leading-none">{n}</span>{l}</span>;
+            })}
+          </div>
+        </div>
+      )}
+      {allHazards.length > placed.size && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+          <strong>{allHazards.length - placed.size} hazard{allHazards.length-placed.size>1?'s':''} not yet rated.</strong> Click each pill above, then click a matrix cell to assign its rating.
+        </div>
+      )}
+      {printPreview && <PrintPreviewModal risks={risks} onClose={() => setPrintPreview(false)}/>}
+    </div>
+  );
+}
+
+// ── Print Preview Modal ───────────────────────────────────────────────────────
+function PrintPreviewModal({ risks, onClose }) {
+  const sorted = [...risks].sort((a,b) => score(b)-score(a));
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex flex-col">
+      <div className="bg-navy text-white px-6 py-3 flex items-center justify-between print-hidden">
+        <span className="font-bold text-sm">Print Preview — Risk Register</span>
+        <div className="flex gap-3">
+          <button onClick={() => window.print()} className="btn-primary" style={{padding:'8px 20px',fontSize:'14px'}}>🖨️ Print</button>
+          <button onClick={onClose} className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 px-4 py-2 rounded-lg font-semibold transition-all">Close</button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto bg-white" id="print-area">
+        <div className="p-8 max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-xl font-bold" style={{color:'#1A2238'}}>Risk Register</h2>
+            <span className="text-xs text-gray-400">World Aware — Disaster Plan Builder</span>
+          </div>
+          <p className="text-sm text-gray-400 mb-6">{sorted.length} hazard{sorted.length!==1?'s':''} assessed · sorted by priority score</p>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
+            <thead>
+              <tr style={{background:'#1A2238',color:'white'}}>
+                {['#','Hazard','Likelihood','Impact','Score','Priority'].map(h => (
+                  <th key={h} style={{padding:'10px 12px',textAlign:'left',fontSize:'11px',fontWeight:'bold',textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((r,i) => {
+                const s = score(r); const lv = levelOf(s);
+                return (
+                  <tr key={r.id} style={{background:i%2===0?'#F8FAFC':'white',borderBottom:'1px solid #E5E7EB'}}>
+                    <td style={{padding:'10px 12px',color:'#9CA3AF',fontWeight:'bold'}}>{i+1}</td>
+                    <td style={{padding:'10px 12px',fontWeight:'600',color:'#1A2238'}}>{r.icon} {r.name}</td>
+                    <td style={{padding:'10px 12px',color:'#334155'}}>{r.likelihood} — {L_LABELS[r.likelihood-1]}</td>
+                    <td style={{padding:'10px 12px',color:'#334155'}}>{r.impact} — {I_LABELS[r.impact-1]}</td>
+                    <td style={{padding:'10px 12px',fontWeight:'900',textAlign:'center',color:'#1A2238',fontSize:'15px'}}>{s}</td>
+                    <td style={{padding:'10px 12px'}}>
+                      <span style={{padding:'3px 10px',borderRadius:'999px',fontSize:'11px',fontWeight:'bold',background:lv.bg,color:lv.text}}>{lv.label}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{marginTop:'24px',display:'flex',gap:'16px',flexWrap:'wrap'}}>
+            {[{l:'Low (1–4)',c:'#22C55E'},{l:'Medium (5–9)',c:'#EAB308'},{l:'High (10–14)',c:'#F97316'},{l:'Critical (15–25)',c:'#EF4444'}].map(({l,c}) => (
+              <div key={l} style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'11px',color:'#6B7280'}}>
+                <div style={{width:10,height:10,borderRadius:2,background:c}}/>
+                {l}
+              </div>
+            ))}
+          </div>
+          <p style={{marginTop:'16px',fontSize:'11px',color:'#CBD5E1'}}>Generated by World Aware Disaster Plan Builder · beworldaware.com</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PHASE 4: DOCUMENT GENERATION ────────────────────────────────────────────
+const {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  WidthType, AlignmentType, ShadingType, BorderStyle, HeadingLevel,
+  PageNumber, Footer, Header, TabStopType, TabStopLeader,
+  convertInchesToTwip, UnderlineType,
+} = window.docx || {};
+
+const NAVY_HEX  = '1A2238';
+const BRAND_HEX = 'FF6B35';
+const GRAY_HEX  = '64748B';
+const RED_HEX   = 'DC2626';
+
+const NO_BORDER = {
+  top:    { style: BorderStyle.NONE, size: 0, color: 'auto' },
+  bottom: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+  left:   { style: BorderStyle.NONE, size: 0, color: 'auto' },
+  right:  { style: BorderStyle.NONE, size: 0, color: 'auto' },
+};
+const TABLE_BORDERS = {
+  top:               { style: BorderStyle.SINGLE, size: 6, color: NAVY_HEX },
+  bottom:            { style: BorderStyle.SINGLE, size: 6, color: NAVY_HEX },
+  left:              { style: BorderStyle.NONE, size: 0 },
+  right:             { style: BorderStyle.NONE, size: 0 },
+  insideHorizontal:  { style: BorderStyle.SINGLE, size: 2, color: 'E2E8F0' },
+  insideVertical:    { style: BorderStyle.NONE, size: 0 },
+};
+
+// ── Doc primitives ────────────────────────────────────────────────────────────
+function dp(text, opts = {}) {
+  return new Paragraph({ children: [new TextRun({ text: text ?? '', size: 22, color: '334155', ...opts })], spacing: { before: 80, after: 80 } });
+}
+function dh1(text) {
+  return new Paragraph({
+    children: [new TextRun({ text, bold: true, size: 36, color: NAVY_HEX })],
+    spacing: { before: 480, after: 200 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: BRAND_HEX } },
+  });
+}
+function dh2(text) {
+  return new Paragraph({
+    children: [new TextRun({ text, bold: true, size: 26, color: NAVY_HEX })],
+    spacing: { before: 320, after: 140 },
+  });
+}
+function dh3(text) {
+  return new Paragraph({
+    children: [new TextRun({ text, bold: true, size: 22, color: BRAND_HEX })],
+    spacing: { before: 200, after: 80 },
+  });
+}
+function dbullet(text, indent = 360) {
+  return new Paragraph({
+    children: [new TextRun({ text: `\u2022  ${text}`, size: 22, color: '334155' })],
+    spacing: { before: 60, after: 60 },
+    indent: { left: indent },
+  });
+}
+function dnote(text) {
+  return new Paragraph({
+    children: [new TextRun({ text, size: 20, color: '94A3B8', italics: true })],
+    spacing: { before: 60, after: 60 },
+  });
+}
+function dspacer(before = 160, after = 160) {
+  return new Paragraph({ children: [new TextRun({ text: '' })], spacing: { before, after } });
+}
+function dpb() {
+  return new Paragraph({ pageBreakBefore: true, children: [new TextRun({ text: '' })] });
+}
+function dph(label) {
+  // Orange bracketed placeholder
+  return new TextRun({ text: `[${label}]`, bold: true, color: BRAND_HEX, size: 22 });
+}
+function dkv(label, value) {
+  return new Paragraph({
+    children: [
+      new TextRun({ text: `${label}:  `, bold: true, size: 22, color: NAVY_HEX }),
+      value
+        ? new TextRun({ text: value, size: 22, color: '334155' })
+        : new TextRun({ text: '[NOT PROVIDED]', size: 22, color: BRAND_HEX, italics: true }),
+    ],
+    spacing: { before: 80, after: 80 },
+  });
+}
+function difthen(ifText, steps) {
+  return [
+    new Paragraph({
+      children: [
+        new TextRun({ text: 'IF ', bold: true, size: 22, color: RED_HEX }),
+        new TextRun({ text: ifText, size: 22, color: '334155', italics: true }),
+        new TextRun({ text: '  —  THEN:', bold: true, size: 22, color: NAVY_HEX }),
+      ],
+      spacing: { before: 200, after: 80 },
+    }),
+    ...steps.map((s, i) => new Paragraph({
+      children: [new TextRun({ text: `${i + 1}.  ${s}`, size: 22, color: '334155' })],
+      spacing: { before: 60, after: 60 },
+      indent: { left: 480 },
+    })),
+  ];
+}
+
+// ── Tables ────────────────────────────────────────────────────────────────────
+function headerCell(text, pct, fill = NAVY_HEX) {
+  return new TableCell({
+    width: { size: Math.round(9360 * pct / 100), type: WidthType.DXA },
+    shading: { fill, type: ShadingType.CLEAR, color: 'auto' },
+    borders: NO_BORDER,
+    children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 18, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+  });
+}
+function dataCell(text, fill = 'FFFFFF', center = false, textColor = '334155', width = 9360) {
+  return new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    shading: { fill, type: ShadingType.CLEAR, color: 'auto' },
+    borders: NO_BORDER,
+    children: [new Paragraph({ children: [new TextRun({ text: text ?? '—', size: 20, color: textColor })], alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT })],
+  });
+}
+
+function riskTable(risks) {
+  const sorted = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact));
+  const COLS = [4, 28, 20, 17, 10, 21];
+  const HEADS = ['#', 'Hazard', 'Likelihood', 'Impact', 'Score', 'Priority'];
+  const hRow = new TableRow({
+    tableHeader: true,
+    children: HEADS.map((t, i) => headerCell(t, COLS[i])),
+  });
+  const dRows = sorted.map((r, idx) => {
+    const s = r.likelihood * r.impact;
+    const lv = s >= 15
+      ? { label: 'CRITICAL', fill: 'FEE2E2', color: '991B1B' }
+      : s >= 10 ? { label: 'HIGH',     fill: 'FFEDD5', color: '9A3412' }
+      : s >= 5  ? { label: 'MEDIUM',   fill: 'FEF9C3', color: '854D0E' }
+      :           { label: 'LOW',      fill: 'DCFCE7', color: '166534' };
+    const fill = idx % 2 === 0 ? 'F8FAFC' : 'FFFFFF';
+    return new TableRow({ children: [
+      dataCell(`${idx + 1}`, fill, true),
+      dataCell(r.name,                        fill),
+      dataCell(`${r.likelihood}  ${L_LABELS[r.likelihood - 1]}`, fill),
+      dataCell(`${r.impact}  ${I_LABELS[r.impact - 1]}`,         fill),
+      dataCell(`${s}`,                        fill, true, NAVY_HEX),
+      dataCell(lv.label,                      lv.fill, true, lv.color),
+    ]});
+  });
+  return new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: [374, 2621, 1872, 1591, 936, 1966], borders: TABLE_BORDERS, rows: [hRow, ...dRows] });
+}
+
+function twoColTable(rows) {
+  // Simple label / value table
+  return new Table({
+    width: { size: 9360, type: WidthType.DXA },
+    columnWidths: [4680, 4680],
+    borders: TABLE_BORDERS,
+    rows: rows.map(([label, value], i) => new TableRow({ children: [
+      dataCell(label, i % 2 === 0 ? 'F1F5F9' : 'FFFFFF'),
+      new TableCell({
+        shading: { fill: i % 2 === 0 ? 'F1F5F9' : 'FFFFFF', type: ShadingType.CLEAR, color: 'auto' },
+        borders: NO_BORDER,
+        children: [new Paragraph({ children: [
+          value ? new TextRun({ text: value, size: 20, color: '334155' }) : dph('TO BE COMPLETED'),
+        ]})],
+      }),
+    ]})),
+  });
+}
+
+function functionsTable(fns) {
+  const COLS = [30, 25, 25, 20];
+  const HEADS = ['Critical Function', 'Why Critical', 'Max Downtime', 'Department'];
+  const hRow = new TableRow({ tableHeader: true, children: HEADS.map((t, i) => headerCell(t, COLS[i])) });
+  const dRows = fns.map((fn, idx) => {
+    const fill = idx % 2 === 0 ? 'F8FAFC' : 'FFFFFF';
+    return new TableRow({ children: [
+      dataCell(fn.name || '[FUNCTION NAME]', fill),
+      dataCell(fn.reason || '—', fill),
+      dataCell(fn.downtime || '—', fill, true),
+      dataCell('[DEPARTMENT]', fill),
+    ]});
+  });
+  return new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: [2808, 2340, 2340, 1872], borders: TABLE_BORDERS, rows: [hRow, ...dRows] });
+}
+
+// ── Annex content library ──────────────────────────────────────────────────────
+function annexPages(annexId, state) {
+  const co  = state.profile.companyName || '[COMPANY NAME]';
+  const addr = state.profile.address || '[FACILITY ADDRESS]';
+
+  const annexMap = {
+    'natural': () => [
+      dh2('Purpose'),
+      dp(`This annex provides step-by-step response procedures for natural disasters that could affect ${co}. Activate the appropriate section based on the type of event.`),
+
+      dh3('A.1  Fire / Explosion'),
+      ...difthen('fire, smoke, or explosion is detected at any company location', [
+        'Activate the nearest fire alarm pull station immediately.',
+        `Call 911 — provide location: ${addr}.`,
+        'Evacuate ALL personnel via designated emergency exits. Do NOT use elevators.',
+        'Account for all employees at the designated outdoor assembly point.',
+        'Do not re-enter until cleared by fire department.',
+        `Notify Incident Commander: `, `Contact property insurer: `,
+        'Initiate business interruption claim if operations are affected.',
+      ]),
+      dspacer(80, 40),
+      ...difthen('primary facility is inaccessible for more than 24 hours', [
+        `Activate alternate work location plan: `,
+        'Notify all employees of work-from-home or alternate site instructions.',
+        'Forward main phone lines to designated mobile number.',
+        `Notify key customers and vendors of operational status within 48 hours.`,
+      ]),
+
+      dh3('A.2  Flood / Water Intrusion'),
+      ...difthen('a flood warning is issued OR water intrusion occurs at any facility', [
+        'Monitor National Weather Service at weather.gov for updates.',
+        'Elevate or relocate critical equipment and documents above flood level.',
+        'Back up all data to cloud/offsite storage immediately if not automated.',
+        'Shut off electrical power at the main breaker if flooding is imminent.',
+        'Evacuate all personnel; call 911 if personnel are at risk.',
+        `Notify Incident Commander and activate Crisis Management Team.`,
+        `File insurance claim: `,
+      ]),
+
+      dh3('A.3  Earthquake'),
+      ...difthen('an earthquake occurs', [
+        'DROP, COVER, and HOLD ON until shaking stops — shelter under desks or against interior walls.',
+        'After shaking stops: check for injuries and call 911 if anyone is hurt.',
+        'Evacuate via stairs ONLY — check for structural damage before exiting.',
+        'Account for all personnel at the assembly area.',
+        'Do not re-enter until building is inspected and cleared.',
+        `Notify Incident Commander; activate Crisis Management Team if damage is significant.`,
+        'Assess equipment and data systems for damage before restoring power.',
+      ]),
+
+      dh3('A.4  Severe Storm / Tornado'),
+      ...difthen('a tornado warning or severe storm watch is issued for the area', [
+        'Monitor weather alerts via NOAA Weather Radio or local emergency broadcasts.',
+        'Move personnel to interior rooms on the lowest floor away from windows.',
+        'Do not shelter under wide-span roofs (warehouses, gyms).',
+        'Account for all employees; check on remote or field staff.',
+        'After storm passes: check for downed power lines and structural damage before re-entry.',
+        `Notify Incident Commander if operations are disrupted.`,
+      ]),
+
+      dh2('Recovery Checklist'),
+      dbullet('Photograph all damage before cleanup begins (required for insurance).'),
+      dbullet('Contact insurance carrier within 24 hours of the event.'),
+      dbullet(`File claims: Property: `, `  |  Business Interruption: `),
+      dbullet('Engage qualified contractors for structural repairs — do not use unlicensed workers.'),
+      dbullet('Conduct after-action review within 10 business days.'),
+      dbullet('Update this annex based on lessons learned.'),
+    ],
+
+    'cyber-it': () => [
+      dh2('Purpose'),
+      dp(`This annex provides response procedures for cyber security incidents and IT system failures affecting ${co}.`),
+
+      dh3('B.1  Ransomware / Malware Attack'),
+      ...difthen('ransomware, malware, or a suspected cyber attack is detected on any company system', [
+        'IMMEDIATELY disconnect affected systems from the network (unplug ethernet / disable Wi-Fi). Do NOT power off.',
+        'DO NOT pay any ransom without written executive authorization and legal counsel review.',
+        `Notify IT Lead / MSP: .`,
+        'Engage cyber incident response retainer if applicable.',
+        `Notify cyber liability insurance carrier:  — File claim number: .`,
+        'Report to FBI Internet Crime Complaint Center at ic3.gov.',
+        'Preserve all logs and forensic evidence — do not delete or reimage systems yet.',
+        'Restore from last known-good backup once forensics are complete.',
+      ]),
+      dnote('Target Recovery Time Objective (RTO): [X hours]  |  Recovery Point Objective (RPO): [X hours of data]'),
+
+      dh3('B.2  Data Breach'),
+      ...difthen('unauthorized access to customer, employee, or confidential company data is confirmed or suspected', [
+        'Immediately contain the breach — revoke compromised credentials and isolate affected systems.',
+        'Engage legal counsel to assess notification obligations (HIPAA, state privacy laws, GDPR if applicable).',
+        `Notify cyber insurance carrier: .`,
+        'Conduct forensic analysis to determine scope and affected records.',
+        'Provide written notification to affected individuals within timeframes required by law.',
+        'Offer credit monitoring services to affected individuals as appropriate.',
+        'File regulatory notifications (HHS, state attorney general) as required.',
+      ]),
+
+      dh3('B.3  IT System / Network Outage'),
+      ...difthen('a critical IT system, server, or network is unavailable', [
+        `Notify IT Lead / MSP: .`,
+        'Identify the scope: which systems are affected and which critical functions are impacted.',
+        'Activate manual / offline fallback procedures for affected operations.',
+        'Escalate to vendor support with account/contract number.',
+        'If RTO threshold is breached, notify Incident Commander.',
+        'Restore from backup if system cannot be recovered within the RTO window.',
+        'Validate data integrity before resuming normal operations.',
+      ]),
+
+      dh2('IT Recovery Reference'),
+      twoColTable([
+        ['Primary IT Contact / MSP', ''],
+        ['24/7 Emergency IT Line',   ''],
+        ['Cloud Backup Vendor',       ''],
+        ['Last Verified Backup Date', ''],
+        ['RTO Target',                state.preparedness?.hasOffsiteBackup === 'yes' ? 'Offsite backup in place — confirm RTO' : '[NOT YET CONFIGURED — HIGH PRIORITY]'],
+        ['RPO Target',                ''],
+        ['Critical SaaS Vendors',     ''],
+      ]),
+      dspacer(),
+      dnote('Important: Test backup restoration at least quarterly. Document the date and results below.'),
+    ],
+
+    'violence': () => [
+      dh2('Purpose'),
+      dp(`This annex provides procedures for responding to active threat, workplace violence, and security incidents at ${co}. All employees should be familiar with the RUN-HIDE-FIGHT framework.`),
+
+      dh3('C.1  Active Shooter / Active Threat'),
+      ...difthen('an active shooter or violent threat is present in the facility', [
+        'RUN: Evacuate immediately if a safe path exists. Leave belongings behind. Help others escape if possible.',
+        'HIDE: If evacuation is not possible, find a room, lock/barricade the door, turn off lights, silence phones.',
+        'FIGHT: As a last resort only — use any available objects to incapacitate the threat.',
+        'Call 911 when safe — provide location, description of suspect, and number of victims.',
+        'When law enforcement arrives: keep hands visible, follow all instructions, do not make sudden movements.',
+        'Do not leave the secured area until directed by law enforcement.',
+        `Notify Incident Commander once safe: .`,
+      ]),
+
+      dh3('C.2  Bomb Threat'),
+      ...difthen('a bomb threat is received by phone, email, or written note', [
+        'If by phone: keep the caller talking. Note exact words, voice characteristics, and any background sounds. Use the Bomb Threat Checklist (Appendix).',
+        'Call 911 immediately after the call ends — do not use radios or mobile phones near the suspected device.',
+        'Evacuate the building per the fire evacuation plan — do not use light switches or electronics.',
+        'Do not re-enter until cleared by law enforcement and bomb disposal.',
+        `Notify Incident Commander: .`,
+      ]),
+
+      dh3('C.3  Workplace Violence / Threatening Behavior'),
+      ...difthen('an employee reports threatening behavior, harassment, or a credible threat of violence', [
+        'Take all threats seriously — report immediately to HR and Security.',
+        'Do not confront the individual. Remove the individual from the premises if safe to do so.',
+        `Notify HR Director:  and Incident Commander: .`,
+        'If imminent danger: call 911.',
+        'Document all reported incidents in writing.',
+        'Offer Employee Assistance Program (EAP) resources to affected staff.',
+        'Consider restraining order if threat persists.',
+      ]),
+
+      dh2('Post-Incident'),
+      dbullet('Cooperate fully with law enforcement investigation.'),
+      dbullet(`Activate Employee Assistance Program: .`),
+      dbullet('Hold an all-hands communication within 24 hours to address employee concerns.'),
+      dbullet('Conduct a trauma-informed debrief with affected employees.'),
+      dbullet('Review physical security measures (access control, cameras, lighting) within 30 days.'),
+    ],
+
+    'key-person': () => [
+      dh2('Purpose'),
+      dp(`This annex outlines procedures for maintaining operations when a key executive or critical employee is suddenly unavailable due to death, disability, resignation, or other cause.`),
+
+      dh3('D.1  Succession & Interim Authority'),
+      twoColTable([
+        ['Position',                    'Successor / Interim'],
+        ['Chief Executive Officer',     ''],
+        ['Chief Operating Officer',     ''],
+        ['Chief Financial Officer',     ''],
+        ['IT Director / Lead',          ''],
+        ['Operations Manager',          ''],
+        ['[KEY POSITION]',              ''],
+        ['[KEY POSITION]',              ''],
+      ]),
+      dspacer(120, 60),
+
+      dh3('D.2  Sudden Loss of Key Employee'),
+      ...difthen('a key executive or critical employee is suddenly unavailable', [
+        'Notify the board of directors / ownership within 4 hours of confirmation.',
+        'Activate designated successor per succession table above.',
+        'Secure the departing employee\'s access credentials, files, and institutional knowledge.',
+        'Assess impact on active projects, client commitments, and regulatory obligations.',
+        'Communicate role changes to affected teams on a need-to-know basis.',
+        'Engage executive search / staffing firm if needed.',
+        `Contact key-person life or disability insurance carrier if applicable: .`,
+      ]),
+
+      dh3('D.3  Knowledge Transfer Protocol'),
+      ...difthen('a known departure is upcoming (resignation, planned leave, retirement)', [
+        'Begin knowledge transfer at least [X weeks] before departure date.',
+        'Document all active projects, vendor contacts, passwords, and recurring responsibilities.',
+        'Conduct shadowing sessions with the designated successor.',
+        'Update all system credentials and remove departing employee access on final day.',
+        'Schedule check-in calls with key clients/vendors to introduce successor.',
+      ]),
+
+      dh2('Cross-Training Requirements'),
+      dbullet('Every critical function must have at least one trained backup.'),
+      dbullet('Cross-training should be documented and tested at least annually.'),
+      dbullet('Standard Operating Procedures (SOPs) for all critical functions must be maintained and accessible.'),
+      dnote('Review and update the succession table above at least annually and after any organizational changes.'),
+    ],
+
+    'pandemic': () => [
+      dh2('Purpose'),
+      dp(`This annex provides procedures for maintaining operations during a pandemic, epidemic, or public health emergency as declared by the WHO, CDC, or state/local health authority.`),
+
+      dh3('E.1  Pandemic Activation Triggers'),
+      dbullet('WHO or CDC declares a Public Health Emergency of International Concern (PHEIC).'),
+      dbullet(`Local or state health authority issues guidance affecting ${co}'s operations or workforce.`),
+      dbullet('Employee absenteeism exceeds [15%] due to illness or caregiving obligations.'),
+      dbullet('Government order mandates facility closure or restrictions on gatherings.'),
+
+      dh3('E.2  Immediate Response'),
+      ...difthen('a pandemic is declared OR absenteeism exceeds trigger threshold', [
+        `Notify Incident Commander and convene Crisis Management Team: .`,
+        'Activate remote work protocol for all employees capable of working off-site.',
+        'Implement enhanced cleaning and disinfection at all occupied facilities.',
+        'Establish symptom-reporting requirements — employees must report illness to HR before entering the workplace.',
+        'Suspend non-essential business travel.',
+        `Order PPE supplies: masks, gloves, sanitizer — approved vendor: .`,
+        'Communicate health guidance to all employees via [EMAIL / INTRANET / APP].',
+      ]),
+
+      dh3('E.3  Minimum Staffing Model'),
+      dp('If on-site operations are required with reduced staff:'),
+      dbullet('Identify the minimum number of staff required to maintain each critical function.'),
+      dbullet('Establish cohorts / shift rotations to minimize cross-exposure.'),
+      dbullet('Implement touchless entry and physical distancing protocols.'),
+      dbullet('Designate a COVID/health officer responsible for daily symptom checks.'),
+      twoColTable([
+        ['Remote Work Capability',      state.preparedness?.remoteWork === 'yes-all' ? 'Full — all employees capable' : state.preparedness?.remoteWork === 'partial' ? 'Partial — some roles only' : 'Limited — requires planning'],
+        ['Collaboration Platform',      ''],
+        ['VPN / Secure Remote Access',  ''],
+        ['HR Contact for Sick Leave',   ''],
+        ['EAP / Mental Health Resource',''],
+      ]),
+
+      dh3('E.4  Recovery / Return to Work'),
+      ...difthen('public health guidance permits return to normal operations', [
+        'Phase return to on-site work per local/state guidance — do not rush.',
+        'Conduct deep cleaning before employees return.',
+        'Hold an all-hands communication to explain return-to-work procedures.',
+        'Assess and address employee mental health concerns — utilize EAP.',
+        'Replenish emergency supply stockpile (PPE, sanitizer).',
+        'Conduct after-action review and update this annex.',
+      ]),
+    ],
+
+    'supply-chain': () => [
+      dh2('Purpose'),
+      dp(`This annex provides procedures for maintaining operations when a critical supplier, vendor, or service provider is unable to deliver, or when supply chain disruptions affect ${co}'s ability to operate.`),
+
+      dh3('F.1  Critical Suppliers'),
+      twoColTable([
+        ['Supplier / Vendor',    'Category',],
+        ['[PRIMARY SUPPLIER 1]', '[Category — e.g. Raw Materials]'],
+        ['[PRIMARY SUPPLIER 2]', '[Category — e.g. IT Services]'],
+        ['[PRIMARY SUPPLIER 3]', '[Category — e.g. Logistics]'],
+        ['[PRIMARY SUPPLIER 4]', '[Category — e.g. Utilities]'],
+      ]),
+      dspacer(80),
+
+      dh3('F.2  Alternate / Backup Suppliers'),
+      twoColTable([
+        ['Category',            'Primary Supplier',     ],
+        ['[CATEGORY 1]',        '[Alternate Supplier — pre-qualified]'],
+        ['[CATEGORY 2]',        '[Alternate Supplier — pre-qualified]'],
+        ['[CATEGORY 3]',        '[Alternate Supplier — pre-qualified]'],
+      ]),
+      dspacer(),
+
+      dh3('F.3  Supply Chain Disruption Response'),
+      ...difthen('a critical supplier notifies of inability to deliver OR a delivery is significantly delayed', [
+        `Notify Operations Manager / Procurement: .`,
+        'Assess current inventory levels — calculate how many days of operations are supported.',
+        'Contact the primary supplier for status and estimated resolution timeline.',
+        'Activate pre-qualified alternate supplier (see table above).',
+        'Issue emergency purchase orders as needed — obtain required approvals.',
+        'Implement conservation measures if inventory is critically low.',
+        'Notify production / service delivery teams of adjusted schedules.',
+        `Notify key customers if delivery commitments will be impacted.`,
+      ]),
+
+      dh3('F.4  Emergency Procurement Authority'),
+      twoColTable([
+        ['Up to $[AMOUNT]',      '[TITLE] — no additional approval required'],
+        ['$[AMOUNT] – $[AMOUNT]','[TITLE] approval required'],
+        ['Over $[AMOUNT]',       'Executive / Board approval required'],
+      ]),
+
+      dh2('Post-Event Actions'),
+      dbullet('Rebuild inventory buffer to pre-event levels within [X days].'),
+      dbullet('Formally onboard and qualify any alternate suppliers used in the emergency.'),
+      dbullet('Update supplier risk assessment — add new vendors to the approved list.'),
+      dbullet('Renegotiate contracts to include business continuity clauses and dual-sourcing requirements.'),
+      dbullet('Conduct after-action review within 30 days.'),
+    ],
+  };
+
+  const fn = annexMap[annexId];
+  return fn ? fn() : [dp('Content for this annex is under development.')];
+}
+
+// ── Master document builder ───────────────────────────────────────────────────
+async function generateDocument(state) {
+  const { profile: p, functions: fns, preparedness: pr, risks, config: c } = state;
+  const co   = p.companyName     || '[COMPANY NAME]';
+  const city = p.address         || '[ADDRESS]';
+  const ind  = p.industry        || '[INDUSTRY]';
+  const emp  = p.employees       || '[EMPLOYEE COUNT]';
+  const locs = p.locations       || '[LOCATIONS]';
+  const cons = c.consultantName  || '[CONSULTANT NAME]';
+  const comp = c.consultantCompany || 'World Aware';
+  const ver  = c.planVersion     || '1.0';
+  const dt   = c.planDate        || new Date().toISOString().slice(0, 10);
+
+  const sortedRisks = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact));
+  const critN  = sortedRisks.filter(r => r.likelihood * r.impact >= 15).length;
+  const highN  = sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 10 && s < 15; }).length;
+  const gaps   = [pr.hasExistingPlan === 'no', pr.hasBackupPower === 'no', pr.remoteWork === 'no', pr.hasOffsiteBackup === 'no'].filter(Boolean).length;
+
+  const selectedAnnexes = ANNEXES.filter(a => c.selectedAnnexes.includes(a.id));
+
+  const tocLines = [
+    ...REQUIRED_SECTIONS.map((s, i) => [i + 1, s.label]),
+  ];
+  const annexLetters = selectedAnnexes.map((a, i) => [String.fromCharCode(65 + i), a.title]);
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+  const docFooter = new Footer({
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({ text: `${co}  |  Disaster & Continuity Plan  |  v${ver}  |  ${comp}`, size: 16, color: '94A3B8' }),
+          new TextRun({ text: '    Page ', size: 16, color: '94A3B8' }),
+          new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "94A3B8" }),
+        ],
+        alignment: AlignmentType.CENTER,
+        border: { top: { style: BorderStyle.SINGLE, size: 2, color: 'E2E8F0' } },
+      }),
+    ],
+  });
+
+  const doc = new Document({
+    creator: comp,
+    title:   `${co} — Disaster & Business Continuity Plan`,
+    description: `Prepared by ${cons} · ${comp} · Version ${ver}`,
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Calibri', size: 22 },
+        },
+      },
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 12240, height: 15840 }, margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
+        },
+      },
+      footers: { default: docFooter },
+      children: [
+
+        // ══════════════════════════════════════════════════════════════════════
+        // TITLE PAGE
+        // ══════════════════════════════════════════════════════════════════════
+        dspacer(2400, 480),
+        new Paragraph({ children: [new TextRun({ text: comp.toUpperCase(), bold: true, size: 20, color: BRAND_HEX, allCaps: true })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }),
+        new Paragraph({ children: [new TextRun({ text: 'DISASTER & BUSINESS CONTINUITY PLAN', bold: true, size: 52, color: NAVY_HEX })], alignment: AlignmentType.CENTER, spacing: { before: 60, after: 160 } }),
+        new Paragraph({
+          children: [new TextRun({ text: '', size: 8 })],
+          border: { top: { style: BorderStyle.SINGLE, size: 12, color: BRAND_HEX }, bottom: { style: BorderStyle.SINGLE, size: 12, color: BRAND_HEX } },
+          spacing: { before: 20, after: 20 },
+          alignment: AlignmentType.CENTER,
+        }),
+        dspacer(240, 240),
+        new Paragraph({ children: [new TextRun({ text: co, bold: true, size: 40, color: NAVY_HEX })], alignment: AlignmentType.CENTER, spacing: { after: 80 } }),
+        new Paragraph({ children: [new TextRun({ text: ind, size: 24, color: GRAY_HEX })], alignment: AlignmentType.CENTER, spacing: { after: 640 } }),
+        twoColTable([
+          ['Prepared by',      cons],
+          ['Consulting Firm',  comp],
+          ['Plan Version',     `Version ${ver}`],
+          ['Date',             dt],
+          ['Classification',   'CONFIDENTIAL — Authorized Personnel Only'],
+        ]),
+        dspacer(640, 160),
+        new Paragraph({ children: [new TextRun({ text: 'This document contains sensitive operational information. Distribution is restricted to authorized personnel only.', size: 18, color: '94A3B8', italics: true })], alignment: AlignmentType.CENTER }),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // TABLE OF CONTENTS
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('Table of Contents'),
+        dspacer(80, 40),
+        ...tocLines.map(([n, label]) => new Paragraph({
+          children: [
+            new TextRun({ text: `${n}.  ${label}`, size: 22, color: NAVY_HEX }),
+            new TextRun({ text: '\t[pg]', size: 22, color: 'CBD5E1' }),
+          ],
+          spacing: { before: 100, after: 100 },
+          tabStops: [{ type: TabStopType.RIGHT, position: convertInchesToTwip ? convertInchesToTwip(6) : 8640, leader: TabStopLeader?.DOT ?? 'dot' }],
+        })),
+        ...(annexLetters.length > 0 ? [
+          dspacer(120, 40),
+          new Paragraph({ children: [new TextRun({ text: 'Annexes', bold: true, size: 22, color: GRAY_HEX })], spacing: { before: 60, after: 60 } }),
+          ...annexLetters.map(([letter, title]) => new Paragraph({
+            children: [new TextRun({ text: `Annex ${letter}.  ${title}`, size: 22, color: NAVY_HEX }), new TextRun({ text: '\t[pg]', size: 22, color: 'CBD5E1' })],
+            spacing: { before: 100, after: 100 },
+            tabStops: [{ type: TabStopType.RIGHT, position: convertInchesToTwip ? convertInchesToTwip(6) : 8640, leader: TabStopLeader?.DOT ?? 'dot' }],
+          })),
+        ] : []),
+        dnote('Note: Update page numbers after final review in Microsoft Word (right-click TOC → Update Field → Update entire table).'),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION 1 — EXECUTIVE SUMMARY
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('1.  Executive Summary'),
+        dp(`${co} has developed this Disaster and Business Continuity Plan (BCP) to ensure the organization can prepare for, respond to, and recover from events that disrupt normal operations. This plan establishes clear procedures, defined responsibilities, and recovery priorities to minimize the impact of disruptions on employees, customers, and business operations.`),
+        dspacer(80, 40),
+        dh2('Key Findings'),
+        twoColTable([
+          ['Critical Functions Identified',  `${fns.length} function${fns.length !== 1 ? 's' : ''} documented`],
+          ['Total Hazards Assessed',         `${risks.length} hazard${risks.length !== 1 ? 's' : ''}`],
+          ['Critical Risks (Score 15–25)',    `${critN} — Require immediate action`],
+          ['High Risks (Score 10–14)',        `${highN} — Require priority treatment`],
+          ['Preparedness Gaps Identified',   `${gaps} gap${gaps !== 1 ? 's' : ''} — See Section 2`],
+          ['Plan Version',                   `${ver} — Dated ${dt}`],
+        ]),
+        dspacer(),
+        dh2('Activation Authority'),
+        dp(`This plan may be activated by any member of the Crisis Management Team when an event threatens or disrupts normal ${co} operations. Activation does not require all conditions to be met — use judgment based on the nature and scope of the event.`),
+        dspacer(80, 40),
+        dh2('Top Priority Risks'),
+        ...(sortedRisks.slice(0, 5).map((r, i) => {
+          const s = r.likelihood * r.impact;
+          const lv = s >= 15 ? 'CRITICAL' : s >= 10 ? 'HIGH' : s >= 5 ? 'MEDIUM' : 'LOW';
+          return dbullet(`${r.name}  —  Score: ${s} (${lv})`);
+        })),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION 2 — INTRODUCTION & PURPOSE
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('2.  Introduction & Purpose'),
+        dh2('Plan Purpose'),
+        dp(`This Business Continuity Plan (BCP) establishes the framework for ${co} to respond to and recover from disruptive events while maintaining critical business functions. It is designed as a working template — orange bracketed fields marked ${''} should be reviewed and completed during implementation.`),
+        dspacer(80, 40),
+        dh2('Scope'),
+        dp(`This plan applies to all ${co} employees, contractors, and facilities. It covers ${fns.length} identified critical business function${fns.length !== 1 ? 's' : ''} across ${locs} location${locs !== '1' ? 's' : ''}.`),
+        dspacer(80, 40),
+        dh2('Objectives'),
+        dbullet('Protect employee safety and wellbeing above all other priorities.'),
+        dbullet('Maintain or rapidly restore critical business functions.'),
+        dbullet('Minimize financial losses, reputational damage, and regulatory exposure.'),
+        dbullet('Communicate effectively with employees, customers, and stakeholders.'),
+        dbullet('Ensure a systematic and documented recovery process.'),
+        dspacer(80, 40),
+        dh2('Plan Assumptions'),
+        dbullet('At least one member of the Crisis Management Team is reachable at all times.'),
+        dbullet('Employees have been trained on their roles in this plan.'),
+        dbullet('This plan is reviewed and updated at least annually.'),
+        dbullet('Individual departments maintain department-level procedures aligned with this plan.'),
+        dspacer(80, 40),
+        dh2('Key Definitions'),
+        dkv('Crisis Management Team (CMT)', 'The group of senior leaders responsible for activating and managing this plan.'),
+        dkv('Recovery Time Objective (RTO)', 'The maximum time a critical function can be offline before unacceptable impact occurs.'),
+        dkv('Recovery Point Objective (RPO)', 'The maximum age of data that must be recovered — defines backup frequency requirements.'),
+        dkv('Maximum Tolerable Downtime (MTD)', 'The longest period the organization can function without a critical resource.'),
+        dkv('Incident Commander', 'The designated leader responsible for overall coordination of the response.'),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION 3 — SITUATION OVERVIEW
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('3.  Situation Overview'),
+        dh2('Organization Profile'),
+        twoColTable([
+          ['Legal Name',              co],
+          ['Industry',                ind],
+          ['Headquarters',            city],
+          ['Number of Employees',     emp],
+          ['Number of Locations',     locs],
+          ['Primary Contact',         ''],
+          ['Title',                   ''],
+          ['Emergency Phone',         ''],
+          ['Emergency Email',         ''],
+        ]),
+        dspacer(),
+        dh2('Critical Business Functions'),
+        dp('The following functions have been identified as critical to operations. They represent the highest recovery priorities.'),
+        fns.length > 0 ? functionsTable(fns) : dp('[No critical functions were entered. Please complete the intake form.]'),
+        dspacer(),
+        dh2('Preparedness Status'),
+        twoColTable([
+          ['Existing Emergency Plan',   pr.hasExistingPlan === 'yes' ? '✓ In place — review for alignment with this BCP' : pr.hasExistingPlan === 'no' ? '✗ Not in place — HIGH PRIORITY gap' : '[Not specified]'],
+          ['Backup Power (Generator)',  pr.hasBackupPower  === 'yes' ? '✓ In place — document capacity and test schedule' : pr.hasBackupPower  === 'no' ? '✗ Not in place — evaluate need' : '[Not specified]'],
+          ['Remote Work Capability',    pr.remoteWork === 'yes-all' ? '✓ All employees capable' : pr.remoteWork === 'partial' ? '⚠ Partial — identify roles that cannot work remotely' : pr.remoteWork === 'no' ? '✗ No remote capability — significant gap' : '[Not specified]'],
+          ['Offsite Data Backup',       pr.hasOffsiteBackup === 'yes' ? '✓ In place — verify frequency and restore testing' : pr.hasOffsiteBackup === 'no' ? '✗ Not in place — CRITICAL gap for data recovery' : '[Not specified]'],
+        ]),
+        ...(gaps > 0 ? [
+          dspacer(80, 40),
+          new Paragraph({ children: [new TextRun({ text: `⚠  ${gaps} Preparedness Gap${gaps > 1 ? 's' : ''} Identified`, bold: true, size: 24, color: RED_HEX })], spacing: { before: 160, after: 80 } }),
+          dp('The items marked ✗ above represent significant gaps in organizational preparedness. Each gap should be assigned an owner and a target completion date immediately.'),
+        ] : []),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION 4 — RISK ASSESSMENT
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('4.  Risk Assessment'),
+        dh2('Methodology'),
+        dp('Risk scores are calculated using a 5×5 Likelihood × Impact matrix (ISO 31000). Each hazard is rated on two axes:'),
+        dbullet('Likelihood: 1 (Rare) → 5 (Almost Certain)'),
+        dbullet('Impact: 1 (Insignificant) → 5 (Catastrophic)'),
+        dbullet('Risk Score = Likelihood × Impact (range: 1–25)'),
+        dspacer(80, 40),
+        twoColTable([
+          ['1–4',   'LOW — Monitor; maintain standard controls'],
+          ['5–9',   'MEDIUM — Implement additional controls; include in annual review'],
+          ['10–14', 'HIGH — Priority treatment; specific response plan required'],
+          ['15–25', 'CRITICAL — Immediate executive attention; dedicated annex required'],
+        ]),
+        dspacer(),
+        dh2('Risk Register'),
+        ...(risks.length > 0
+          ? [riskTable(risks)]
+          : [dp('[No risks were entered during the risk assessment. Please complete Phase 2 of the intake process.]')]
+        ),
+        dspacer(),
+        dh2('Risk Summary'),
+        twoColTable([
+          ['Critical (15–25)', `${critN} hazard${critN !== 1 ? 's' : ''}`],
+          ['High (10–14)',     `${highN} hazard${highN !== 1 ? 's' : ''}`],
+          ['Medium (5–9)',     `${sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 5 && s < 10; }).length} hazard${sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 5 && s < 10; }).length !== 1 ? 's' : ''}`],
+          ['Low (1–4)',        `${sortedRisks.filter(r => r.likelihood * r.impact < 5).length} hazard${sortedRisks.filter(r => r.likelihood * r.impact < 5).length !== 1 ? 's' : ''}`],
+          ['Total Assessed',  `${risks.length} hazard${risks.length !== 1 ? 's' : ''}`],
+        ]),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION 5 — COMMUNICATIONS
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('5.  Communications'),
+        dh2('Notification Cascade'),
+        dp('When an incident is declared, notifications must be issued in the following sequence:'),
+        dbullet('Step 1 — Incident Commander notifies all Crisis Management Team members within 1 hour.'),
+        dbullet('Step 2 — Department heads notify their direct reports within 2 hours.'),
+        dbullet('Step 3 — HR notifies all employees via [EMAIL / MASS NOTIFICATION SYSTEM] within 4 hours.'),
+        dbullet('Step 4 — External communications (customers, vendors, media) as directed by Incident Commander.'),
+        dspacer(),
+        dh2('Crisis Management Team Contacts'),
+        twoColTable([
+          ['Role',                    'Name  |  Phone  |  Email'],
+          ['Incident Commander',      ''],
+          ['Operations Lead',         ''],
+          ['IT / Technology Lead',    ''],
+          ['HR Lead',                 ''],
+          ['Finance Lead',            ''],
+          ['Communications / PR',     ''],
+          ['Legal Counsel',           ''],
+        ]),
+        dspacer(),
+        dh2('Stakeholder Communication Matrix'),
+        twoColTable([
+          ['Audience',       'Timing',         ],
+          ['Employees',      'Within 4 hours of activation'],
+          ['Key Customers',  'Within 24 hours — prioritize largest accounts'],
+          ['Key Vendors',    'Within 24 hours — prioritize single-source suppliers'],
+          ['Board / Owners', 'Immediately upon activation'],
+          ['Regulators',     'Per applicable regulatory requirements'],
+          ['Media / Press',  'Only via designated spokesperson — no employee comments'],
+          ['General Public', 'Via press release if broad public impact — legal review required'],
+        ]),
+        dspacer(),
+        dh2('Communication Templates'),
+        dh3('Employee Notification — Initial Alert'),
+        dp('[SUBJECT: {Company Name} — Emergency Notification]'),
+        dp('[SALUTATION],'),
+        dp(`[${co}] is responding to [DESCRIBE INCIDENT] that occurred on [DATE / TIME]. Your safety is our first priority.`),
+        dp('[Describe immediate actions employees should take: e.g., work from home, report to alternate location, stand by for further instructions.]'),
+        dp(`Updates will be provided every [X hours] via [CHANNEL]. For questions, contact [NAME] at [PHONE / EMAIL].`),
+        dspacer(80, 40),
+        dh3('Customer Notification — Service Impact'),
+        dp('[SUBJECT: Important Update Regarding Your {Product / Service}]'),
+        dp('Dear [CUSTOMER NAME],'),
+        dp(`We are writing to inform you that [${co}] is currently experiencing [BRIEF DESCRIPTION OF ISSUE] which may affect [DESCRIBE IMPACT ON CUSTOMER]. We sincerely apologize for any inconvenience.`),
+        dp('[Describe what you are doing to resolve the issue and the expected timeline.]'),
+        dp(`If you have urgent needs, please contact [NAME] at [PHONE / EMAIL]. We appreciate your patience.`),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // SECTION 6 — TRAINING & MAINTENANCE
+        // ══════════════════════════════════════════════════════════════════════
+        dpb(),
+        dh1('6.  Training & Maintenance'),
+        dh2('Training Requirements'),
+        twoColTable([
+          ['Audience',              'Training Content',              ],
+          ['All employees',         'Emergency procedures, evacuation routes, reporting protocols — Annually'],
+          ['Crisis Management Team','Full plan review and tabletop exercise — Annually'],
+          ['Department managers',   'Department-level BCP procedures — Annually'],
+          ['New hires',             'Basic emergency orientation — Within 30 days of hire'],
+          ['IT staff',              'IT DR procedures and backup restore test — Annually'],
+        ]),
+        dspacer(),
+        dh2('Exercise Schedule'),
+        twoColTable([
+          ['Exercise Type',             'Frequency',   ],
+          ['Fire / Evacuation Drill',   'Twice per year'],
+          ['BCP Tabletop Exercise',     'Annually — CMT and key staff'],
+          ['IT Disaster Recovery Test', 'Annually — restore from backup, document results'],
+          ['Communication Tree Test',   'Annually — test all emergency contacts'],
+          ['Full-Scale Exercise',       'Every 2–3 years — simulate major incident'],
+        ]),
+        dspacer(),
+        dh2('Plan Review & Update Schedule'),
+        dbullet(`Annual Review: Every year on [TARGET MONTH], or more frequently if required.`),
+        dbullet('Trigger Review: After any activation, significant organizational change, or near-miss event.'),
+        dbullet('Owner: Incident Commander or designated BCP Coordinator.'),
+        dbullet(`Next Scheduled Review: .`),
+        dspacer(),
+        dh2('Distribution List'),
+        twoColTable([
+          ['Recipient',              'Title',            ],
+          ['[NAME]',                '[Incident Commander]'],
+          ['[NAME]',                '[Operations Lead]'],
+          ['[NAME]',                '[IT Lead]'],
+          ['[NAME]',                '[HR Lead]'],
+          ['[DEPARTMENT MANAGER]',  '[Department]'],
+          ['External Location',     'Offsite copy — [LOCATION / CLOUD FOLDER]'],
+        ]),
+        dnote(`Document prepared by ${cons} · ${comp} · Version ${ver} · ${dt}`),
+
+        // ══════════════════════════════════════════════════════════════════════
+        // ANNEXES
+        // ══════════════════════════════════════════════════════════════════════
+        ...selectedAnnexes.flatMap((a, i) => [
+          dpb(),
+          dh1(`Annex ${String.fromCharCode(65 + i)}:  ${a.icon}  ${a.title}`),
+          dp(`This annex is part of the ${co} Disaster & Business Continuity Plan (v${ver}).`),
+          dspacer(80, 40),
+          ...annexPages(a.id, state),
+          dspacer(),
+          new Paragraph({
+            children: [new TextRun({ text: `— End of Annex ${String.fromCharCode(65 + i)} —`, size: 18, color: '94A3B8', italics: true })],
+            alignment: AlignmentType.CENTER,
+          }),
+        ]),
+
+      ],
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const safeName = co.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+  saveAs(blob, `${safeName}_BCP_v${ver}_${dt}.docx`);
+}
+
+// ── PHASE 3: PLAN CONFIG ─────────────────────────────────────────────────────
+function StepConfig({ config, onChange, risks }) {
+  const f = k => v => onChange({...config, [k]: v});
+  const recommended = computeRecommended(risks);
+  const highCount   = risks.filter(r => score(r) >= 10).length;
+
+  function toggleAnnex(id) {
+    const next = config.selectedAnnexes.includes(id)
+      ? config.selectedAnnexes.filter(x => x!==id)
+      : [...config.selectedAnnexes, id];
+    onChange({...config, selectedAnnexes: next});
+  }
+
+  const totalSections = REQUIRED_SECTIONS.length + config.selectedAnnexes.length;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-navy">Plan Configuration</h2>
+        <p className="text-gray-500 text-sm mt-1">Choose which sections and annexes to include in the generated plan document.</p>
+      </div>
+
+      {/* Smart recommendation banner */}
+      {highCount > 0 && recommended.length > 0 && (
+        <div className="rounded-xl border border-brand/25 bg-brand-light p-4 flex gap-3">
+          <span className="text-xl flex-shrink-0">💡</span>
+          <div>
+            <p className="text-sm font-semibold text-brand-dark">Smart Recommendation</p>
+            <p className="text-sm text-orange-800 mt-0.5">
+              Based on your risk assessment, <strong>{highCount} high/critical risk{highCount>1?'s':''}</strong> were identified.
+              We've pre-selected {recommended.length} annex{recommended.length>1?'es':''} that address those hazards.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Required sections */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Required Sections</div>
+          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-semibold">Always included</span>
+        </div>
+        <div className="card divide-y divide-gray-50 overflow-hidden">
+          {REQUIRED_SECTIONS.map((s, i) => (
+            <div key={s.id} className="flex items-start gap-4 px-5 py-4">
+              {/* Lock check */}
+              <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold text-navy">
+                    <span className="text-gray-400 font-normal mr-1.5">{i+1}.</span>{s.label}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Required</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed">{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Optional annexes */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Optional Annexes</div>
+          <span className="text-xs text-gray-500 font-semibold">{config.selectedAnnexes.length} of {ANNEXES.length} selected</span>
+        </div>
+        <div className="space-y-2">
+          {ANNEXES.map(a => {
+            const isSelected = config.selectedAnnexes.includes(a.id);
+            const isRecommended = recommended.includes(a.id);
+            return (
+              <Checkbox key={a.id} checked={isSelected} onChange={() => toggleAnnex(a.id)}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base">{a.icon}</span>
+                    <span className={`text-sm font-semibold ${isSelected ? 'text-brand-dark' : 'text-navy'}`}>{a.title}</span>
+                    {isRecommended && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-brand bg-brand-light border border-brand/30 px-2 py-0.5 rounded-full">
+                        ★ Recommended
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{a.subtitle}</p>
+                </div>
+              </Checkbox>
+            );
+          })}
+        </div>
+        <div className="flex gap-3 mt-3">
+          <button onClick={() => onChange({...config, selectedAnnexes: ANNEXES.map(a=>a.id)})} className="text-xs text-brand font-semibold hover:underline">Select all</button>
+          <span className="text-gray-300">·</span>
+          <button onClick={() => onChange({...config, selectedAnnexes: recommended})} className="text-xs text-brand font-semibold hover:underline">Recommended only</button>
+          <span className="text-gray-300">·</span>
+          <button onClick={() => onChange({...config, selectedAnnexes: []})} className="text-xs text-gray-400 font-semibold hover:underline">Clear all</button>
+        </div>
+      </div>
+
+      {/* Consultant info */}
+      <div>
+        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Consultant Information</div>
+        <div className="card p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Consultant Name" required>
+              <TInput value={config.consultantName} onChange={f('consultantName')} placeholder="Jane Smith"/>
+            </Field>
+            <Field label="Consultant Company">
+              <TInput value={config.consultantCompany} onChange={f('consultantCompany')} placeholder="World Aware"/>
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Plan Version" hint="Increment when plan is revised">
+              <TInput value={config.planVersion} onChange={f('planVersion')} placeholder="1.0"/>
+            </Field>
+            <Field label="Plan Date">
+              <TInput type="date" value={config.planDate} onChange={f('planDate')}/>
+            </Field>
+          </div>
+        </div>
+      </div>
+
+      {/* Plan outline preview */}
+      <div>
+        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Document Outline Preview</div>
+        <div className="card p-5">
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center gap-2 text-gray-400 text-xs pb-2 border-b border-gray-100 mb-2 font-semibold uppercase tracking-widest">
+              <span>📄</span> {config.consultantCompany || 'World Aware'} — Disaster &amp; Continuity Plan
+            </div>
+            {REQUIRED_SECTIONS.map((s, i) => (
+              <div key={s.id} className="flex items-center gap-2.5 py-1">
+                <span className="text-green-500 text-xs font-bold">✓</span>
+                <span className="text-gray-400 text-xs w-5 flex-shrink-0">{i+1}.</span>
+                <span className="text-navy font-medium">{s.label}</span>
+              </div>
+            ))}
+            {config.selectedAnnexes.length > 0 && (
+              <>
+                <div className="pt-2 pb-1 border-t border-gray-100 mt-1 text-xs font-bold text-gray-400 uppercase tracking-widest">Annexes</div>
+                {config.selectedAnnexes.map((id, i) => {
+                  const a = ANNEXES.find(x => x.id===id); if(!a) return null;
+                  return (
+                    <div key={id} className="flex items-center gap-2.5 py-1">
+                      <span className="text-brand text-xs font-bold">✓</span>
+                      <span className="text-gray-400 text-xs w-5 flex-shrink-0">{String.fromCharCode(65+i)}.</span>
+                      <span className="text-navy font-medium">{a.icon} {a.title}</span>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            <div className="pt-3 mt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+              <span>{totalSections} section{totalSections!==1?'s':''} total</span>
+              <span>v{config.planVersion || '1.0'} · {config.planDate || TODAY}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── COMPLETE SCREEN ──────────────────────────────────────────────────────────
+function ReadyScreen({ state, onBack, onRestart, onDashboard }) {
+  const { profile:p, risks, config:c } = state;
+  const sorted   = [...risks].sort((a,b) => score(b)-score(a));
+  const critN    = sorted.filter(r => score(r)>=15).length;
+  const highN    = sorted.filter(r => { const s=score(r); return s>=10&&s<15; }).length;
+  const totalSec = REQUIRED_SECTIONS.length + c.selectedAnnexes.length;
+  const missingConsultant = !c.consultantName.trim();
+  const [genStatus, setGenStatus] = useState('idle'); // idle | generating | done | error
+  const [genError,  setGenError]  = useState('');
+
+  async function handleGenerate() {
+    setGenStatus('generating');
+    setGenError('');
+    try {
+      await generateDocument(state);
+      setGenStatus('done');
+    } catch(e) {
+      console.error(e);
+      setGenError(e?.message || 'Unexpected error.');
+      setGenStatus('error');
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-navy text-white px-4 py-4 shadow-lg">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={onDashboard} className="w-9 h-9 rounded-lg bg-brand flex items-center justify-center font-black text-lg hover:bg-brand-dark transition-colors" title="Back to Dashboard">W</button>
+            <div><div className="font-bold text-sm">World Aware</div><div className="text-xs text-white/40">Disaster Plan Builder</div></div>
+          </div>
+          <PhaseBar phase={3}/>
+        </div>
+      </header>
+      <main className="flex-1 px-4 py-10">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Hero */}
+          <div className="card p-8 text-center">
+            <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center text-3xl mx-auto mb-4">📋</div>
+            <h1 className="text-2xl font-bold text-navy mb-2">Plan Ready to Generate</h1>
+            <p className="text-gray-500 text-sm">
+              All intake, risk assessment, and configuration data has been collected for <strong>{p.companyName}</strong>.
+            </p>
+          </div>
+
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label:'Critical Risks', value:critN,  sub:'require immediate action', color:critN>0?'#FEE2E2':'#F3F4F6', text:critN>0?'#991B1B':'#6B7280' },
+              { label:'High Risks',     value:highN,  sub:'require priority attention', color:highN>0?'#FFEDD5':'#F3F4F6', text:highN>0?'#9A3412':'#6B7280' },
+              { label:'Functions',      value:state.functions.length, sub:'critical to operations', color:'#F0F9FF', text:'#0369A1' },
+              { label:'Plan Sections',  value:totalSec, sub:'sections in document',     color:'#F0FDF4', text:'#166534' },
+            ].map(s => (
+              <div key={s.label} className="card p-4 text-center" style={{background:s.color}}>
+                <div className="text-3xl font-black mb-1" style={{color:s.text}}>{s.value}</div>
+                <div className="text-xs font-bold" style={{color:s.text}}>{s.label}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">{s.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Document outline */}
+          <div className="card p-5">
+            <h3 className="font-bold text-navy text-sm mb-4">📄 Document Outline</h3>
+            <div className="space-y-1 text-sm">
+              {REQUIRED_SECTIONS.map((s, i) => (
+                <div key={s.id} className="flex items-center gap-2.5 py-1 border-b border-gray-50">
+                  <span className="text-green-500 text-xs">✓</span>
+                  <span className="text-gray-400 text-xs w-5">{i+1}.</span>
+                  <span className="text-navy font-medium">{s.label}</span>
+                  <span className="ml-auto text-[10px] bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full font-semibold">Required</span>
+                </div>
+              ))}
+              {c.selectedAnnexes.map((id, i) => {
+                const a = ANNEXES.find(x => x.id===id); if(!a) return null;
+                return (
+                  <div key={id} className="flex items-center gap-2.5 py-1 border-b border-gray-50">
+                    <span className="text-brand text-xs">✓</span>
+                    <span className="text-gray-400 text-xs w-5">{String.fromCharCode(65+i)}.</span>
+                    <span className="text-navy font-medium">{a.icon} {a.title}</span>
+                    <span className="ml-auto text-[10px] bg-brand-light text-brand border border-brand/20 px-2 py-0.5 rounded-full font-semibold">Annex</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400 flex justify-between">
+              <span>Prepared by: {c.consultantName||'—'} · {c.consultantCompany||'World Aware'}</span>
+              <span>v{c.planVersion||'1.0'} · {c.planDate||TODAY}</span>
+            </div>
+          </div>
+
+          {missingConsultant && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              ⚠️ <strong>Consultant name is missing.</strong> <button onClick={onBack} className="underline font-semibold">Go back to add it</button> before generating.
+            </div>
+          )}
+
+          {/* Generate button */}
+          <div className="card p-6 text-center space-y-4" style={{background:'#0F172A'}}>
+            {genStatus === 'idle' && <>
+              <div className="text-white text-lg font-bold">Ready to Generate</div>
+              <p className="text-white/50 text-sm">Creates a professional Word (.docx) template with all {totalSec} sections, risk table, IF-THEN procedures, and orange placeholders for the consultant to complete in Word.</p>
+              <button
+                disabled={missingConsultant}
+                onClick={handleGenerate}
+                className="btn-primary w-full sm:w-auto"
+                style={{fontSize:'16px', padding:'14px 48px', opacity: missingConsultant ? 0.4 : 1, cursor: missingConsultant ? 'not-allowed' : 'pointer'}}
+              >
+                Generate Plan →
+              </button>
+              {missingConsultant && <p className="text-amber-400 text-xs">Add consultant name above to enable</p>}
+            </>}
+
+            {genStatus === 'generating' && <>
+              <div className="flex justify-center mb-3">
+                <div style={{width:40,height:40,border:'4px solid rgba(255,255,255,.15)',borderTopColor:'#FF6B35',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+              </div>
+              <div className="text-white text-lg font-bold">Building your document…</div>
+              <p className="text-white/40 text-sm">Assembling {totalSec} sections and populating risk data. This takes a few seconds.</p>
+            </>}
+
+            {genStatus === 'done' && <>
+              <div className="text-4xl mb-2">✅</div>
+              <div className="text-white text-lg font-bold">Document Downloaded!</div>
+              <p className="text-white/50 text-sm">Check your downloads folder for <strong className="text-white/70">{(p.companyName||'Company').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_')}_BCP_v{c.planVersion||'1.0'}_{c.planDate||'today'}.docx</strong></p>
+              <p className="text-white/30 text-xs">Open in Microsoft Word · Orange placeholders indicate fields to complete · Right-click Table of Contents → Update Field to refresh page numbers.</p>
+              <div className="flex gap-3 justify-center flex-wrap pt-2">
+                <button onClick={handleGenerate} className="btn-secondary" style={{padding:'10px 24px'}}>Download Again</button>
+                <button onClick={onDashboard} className="btn-primary" style={{padding:'10px 24px',background:'#374151'}}>← Dashboard</button>
+              </div>
+            </>}
+
+            {genStatus === 'error' && <>
+              <div className="text-4xl mb-2">❌</div>
+              <div className="text-white text-lg font-bold">Generation Failed</div>
+              {genError && <p className="text-red-300 text-xs font-mono bg-black/20 rounded p-2">{genError}</p>}
+              <button onClick={handleGenerate} className="btn-primary" style={{padding:'10px 32px'}}>Try Again</button>
+            </>}
+          </div>
+
+          <div className="flex justify-between flex-wrap gap-3">
+            <button onClick={onBack} className="btn-secondary">← Edit Configuration</button>
+            <div className="flex gap-3">
+              <button onClick={() => { const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); const n=(state.profile.companyName||'Plan').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_'); saveAs(blob, `${n}_plan.json`); }} className="btn-secondary text-sm">📤 Export JSON</button>
+              <button onClick={onDashboard} className="text-sm text-gray-400 hover:text-navy transition-colors font-semibold">← Dashboard</button>
+            </div>
+          </div>
+        </div>
+      </main>
+      <WorldAwareFooter/>
+    </div>
+  );
+}
+
+// ── ABOUT MODAL ──────────────────────────────────────────────────────────────
+function AboutModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div className="card p-8 max-w-md w-full text-center" onClick={e => e.stopPropagation()}>
+        <div className="w-16 h-16 rounded-2xl bg-brand flex items-center justify-center font-black text-3xl text-white mx-auto mb-4">W</div>
+        <h2 className="text-2xl font-black text-navy mb-1">World Aware</h2>
+        <p className="text-brand font-semibold text-sm mb-4">Disaster Plan Builder</p>
+        <p className="text-gray-500 text-sm leading-relaxed mb-6">
+          A professional tool for emergency preparedness consultants to build customized disaster and business continuity plans for their clients — covering risk assessment, critical functions, and full Word document generation.
+        </p>
+        <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left space-y-2.5 text-sm">
+          <div className="flex justify-between items-center"><span className="text-gray-400">Company</span><span className="font-semibold text-navy">World Aware</span></div>
+          <div className="flex justify-between items-center"><span className="text-gray-400">Website</span><a href="https://beworldaware.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-brand hover:underline">beworldaware.com</a></div>
+          <div className="flex justify-between items-center"><span className="text-gray-400">Version</span><span className="font-semibold text-navy">2.0</span></div>
+          <div className="flex justify-between items-center"><span className="text-gray-400">Phases</span><span className="font-semibold text-navy text-right text-xs">Intake · Risk · Config · Generate</span></div>
+        </div>
+        <button onClick={onClose} className="btn-primary w-full">Close</button>
+      </div>
+    </div>
+  );
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function Dashboard({ plans, onNew, onEdit, onDelete, onShowAbout, onImport }) {
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [importError,   setImportError]   = useState('');
+
+  function handleImport(e) {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if(!data.profile) throw new Error('Invalid plan file');
+        const imported = { ...newPlan(), ...data, id: data.id || uid(), updatedAt: new Date().toISOString() };
+        onImport(imported);
+        setImportError('');
+      } catch { setImportError('Invalid file. Please import a valid World Aware plan JSON.'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
+  function exportAll() {
+    const db = dbLoad();
+    const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
+    saveAs(blob, `WorldAware_AllPlans_${TODAY}.json`);
+  }
+
+  function exportPlan(p) {
+    const blob = new Blob([JSON.stringify(p, null, 2)], {type:'application/json'});
+    const n = (p.profile?.companyName||'Plan').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_');
+    saveAs(blob, `${n}_plan.json`);
+  }
+
+  function clearAll() {
+    if(!window.confirm('Delete ALL plans permanently? This cannot be undone.')) return;
+    localStorage.removeItem(DB_KEY);
+    window.location.reload();
+  }
+
+  const sorted = [...plans].sort((a,b) => new Date(b.updatedAt||0) - new Date(a.updatedAt||0));
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-navy text-white px-4 py-4 shadow-lg">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center font-black text-xl">W</div>
+            <div>
+              <div className="font-bold text-base leading-tight">World Aware</div>
+              <div className="text-xs text-white/40 leading-tight">Disaster Plan Builder</div>
+            </div>
+          </div>
+          <button onClick={onShowAbout} className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 px-3 py-1.5 rounded-lg font-semibold transition-all">About</button>
+        </div>
+      </header>
+
+      <main className="flex-1 px-4 py-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* Title row */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-navy">Client Plans</h1>
+              <p className="text-gray-400 text-sm mt-0.5">{plans.length} plan{plans.length!==1?'s':''} saved</p>
+            </div>
+            <button onClick={onNew} className="btn-primary flex items-center gap-2">
+              <span className="text-lg leading-none font-black">+</span> New Plan
+            </button>
+          </div>
+
+          {/* Plan cards */}
+          {sorted.length === 0 ? (
+            <div className="card p-12 text-center">
+              <div className="text-5xl mb-4">📋</div>
+              <h2 className="text-lg font-bold text-navy mb-2">No plans yet</h2>
+              <p className="text-gray-400 text-sm mb-6">Create your first client disaster plan to get started.</p>
+              <button onClick={onNew} className="btn-primary">+ Create First Plan</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sorted.map(p => {
+                const critN = (p.risks||[]).filter(r => r.likelihood*r.impact>=15).length;
+                const highN = (p.risks||[]).filter(r => { const s=r.likelihood*r.impact; return s>=10&&s<15; }).length;
+                const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '—';
+                const hasRisks = (p.risks||[]).length > 0;
+                return (
+                  <div key={p.id} className="card p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+                    <div>
+                      <h3 className="font-bold text-navy text-base leading-tight truncate">{p.profile?.companyName || 'Unnamed Plan'}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{p.profile?.industry || '—'}{p.profile?.employees ? ` · ${p.profile.employees} employees` : ''}</p>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {critN > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{critN} Critical</span>}
+                      {highN > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{highN} High</span>}
+                      {!hasRisks && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">No risks rated</span>}
+                      {(p.config?.selectedAnnexes||[]).length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-light text-brand">{p.config.selectedAnnexes.length} Annex{p.config.selectedAnnexes.length!==1?'es':''}</span>}
+                    </div>
+                    <p className="text-[10px] text-gray-300 mt-auto">Updated {updated}</p>
+                    <div className="flex gap-2 pt-2 border-t border-gray-50 flex-wrap items-center">
+                      <button onClick={() => onEdit(p)} className="btn-primary text-xs" style={{padding:'6px 16px'}}>Edit</button>
+                      <button onClick={() => exportPlan(p)} className="btn-secondary text-xs" style={{padding:'6px 14px'}}>Export</button>
+                      <button onClick={() => setConfirmDelete(p.id)} className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors font-semibold">Delete</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Data management */}
+          <div className="card p-5">
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Data Management</div>
+            <div className="flex flex-wrap gap-3 items-center">
+              <label className="btn-secondary text-sm cursor-pointer" style={{padding:'10px 20px',fontSize:'14px'}}>
+                📥 Import Plan (JSON)
+                <input type="file" accept=".json" onChange={handleImport} className="hidden"/>
+              </label>
+              {plans.length > 0 && <>
+                <button onClick={exportAll} className="btn-secondary text-sm">📤 Export All Plans</button>
+                <button onClick={clearAll} className="text-sm text-gray-300 hover:text-red-400 transition-colors font-semibold px-3 py-2">Clear All</button>
+              </>}
+            </div>
+            {importError && <p className="text-red-500 text-xs mt-3 font-medium">{importError}</p>}
+          </div>
+
+        </div>
+      </main>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="card p-6 max-w-sm w-full">
+            <h3 className="font-bold text-navy text-lg mb-2">Delete Plan?</h3>
+            <p className="text-gray-500 text-sm mb-5">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => { onDelete(confirmDelete); setConfirmDelete(null); }} className="btn-primary" style={{background:'#DC2626'}}>Delete</button>
+              <button onClick={() => setConfirmDelete(null)} className="btn-secondary">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <WorldAwareFooter/>
+    </div>
+  );
+}
+
+// ── APP ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [screen,     setScreen]     = useState('dashboard');
+  const [showAbout,  setShowAbout]  = useState(false);
+  const [plans,      setPlans]      = useState(() => dbLoad().plans);
+  const [plan,       setPlan]       = useState(null);
+  const [phase,      setPhase]      = useState(1);
+  const [p1step,     setP1step]     = useState(0);
+  const [p2step,     setP2step]     = useState(0);
+  const [ready,      setReady]      = useState(false);
+  const [errors,     setErrors]     = useState({});
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  function refreshPlans() { setPlans(dbLoad().plans); }
+
+  function startWizard(p) {
+    setPlan({...p});
+    setPhase(1); setP1step(0); setP2step(0); setReady(false); setErrors({});
+    setScreen('wizard');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function goToDashboard() {
+    refreshPlans(); setScreen('dashboard'); setReady(false);
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function doSave(s = plan) {
+    const updated = {...s, updatedAt: new Date().toISOString()};
+    setPlan(updated);
+    dbSavePlan(updated);
+    refreshPlans();
+    setSaveStatus('saved');
+    setTimeout(() => setSaveStatus(null), 2500);
+    return updated;
+  }
+
+  function update(key, val) { const next = {...plan, [key]: val}; setPlan(next); return next; }
+
+  function validateP1() {
+    if(p1step === 0) {
+      const e = {};
+      if(!plan.profile.companyName.trim()) e.companyName = 'Company name is required.';
+      if(!plan.profile.industry)           e.industry    = 'Please select an industry.';
+      if(!plan.profile.employees)          e.employees   = 'Please select employee count.';
+      if(!plan.profile.locations)          e.locations   = 'Please select number of locations.';
+      setErrors(e); return Object.keys(e).length === 0;
+    }
+    if(p1step === 1) {
+      const e = {};
+      if(plan.functions.length === 0) { e._general = 'Add at least one critical function.'; setErrors(e); return false; }
+      plan.functions.forEach((fn, i) => { if(!fn.name.trim()) { if(!e[i]) e[i]={}; e[i].name = 'Function name is required.'; } });
+      setErrors(e); return Object.keys(e).length === 0;
+    }
+    setErrors({}); return true;
+  }
+
+  function validateP3() {
+    if(!plan.config.consultantName.trim()) { setErrors({ consultantName: 'Consultant name is required.' }); return false; }
+    setErrors({}); return true;
+  }
+
+  function p1Next() {
+    if(!validateP1()) return;
+    if(p1step < 3) { setP1step(p1step + 1); window.scrollTo({top:0,behavior:'smooth'}); }
+    else { doSave(); setPhase(2); setP2step(0); window.scrollTo({top:0,behavior:'smooth'}); }
+  }
+  function p1Prev() { setErrors({}); if(p1step > 0) setP1step(p1step - 1); }
+
+  function p2Next() {
+    if(p2step === 0) {
+      if(plan.selectedHazardIds.length === 0) { setErrors({hazards:'Select at least one hazard.'}); return; }
+      setErrors({}); setP2step(1); window.scrollTo({top:0,behavior:'smooth'});
+    } else {
+      const rec = computeRecommended(plan.risks);
+      const cfg = plan.config.selectedAnnexes.length === 0 ? {...plan.config, selectedAnnexes: rec} : plan.config;
+      const next = {...plan, config: cfg};
+      setPlan(next); doSave(next);
+      setPhase(3); window.scrollTo({top:0,behavior:'smooth'});
+    }
+  }
+  function p2Prev() {
+    if(p2step > 0) { setP2step(0); window.scrollTo({top:0,behavior:'smooth'}); }
+    else           { setPhase(1); setP1step(3); window.scrollTo({top:0,behavior:'smooth'}); }
+  }
+
+  function p3Finish() {
+    if(!validateP3()) return;
+    doSave(); setReady(true); window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  // Dashboard
+  if(screen === 'dashboard') return (
+    <>
+      <Dashboard
+        plans={plans}
+        onNew={() => startWizard(newPlan())}
+        onEdit={p => startWizard(p)}
+        onDelete={id => { dbDeletePlan(id); refreshPlans(); }}
+        onShowAbout={() => setShowAbout(true)}
+        onImport={imported => { dbSavePlan(imported); refreshPlans(); }}
+      />
+      {showAbout && <AboutModal onClose={() => setShowAbout(false)}/>}
+    </>
+  );
+
+  // Ready screen
+  if(ready) return (
+    <ReadyScreen
+      state={plan}
+      onBack={() => { setReady(false); window.scrollTo({top:0,behavior:'smooth'}); }}
+      onDashboard={goToDashboard}
+      onRestart={() => startWizard(newPlan())}
+    />
+  );
+
+  // Wizard
+  const allHazards  = [...HAZARD_LIST, ...plan.customHazards].filter(h => plan.selectedHazardIds.includes(h.id));
+  const stepLabel   = phase===1 ? `Phase 1: ${P1_LABELS[p1step]}` : phase===2 ? `Phase 2: ${p2step===0?'Select Hazards':'Risk Matrix'}` : 'Phase 3: Plan Configuration';
+  const stepTotal   = phase===1 ? 4 : phase===2 ? 2 : 1;
+  const stepCurrent = phase===1 ? p1step : phase===2 ? p2step : 0;
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-navy text-white px-4 py-4 shadow-lg sticky top-0 z-30">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button onClick={goToDashboard} className="w-9 h-9 rounded-lg bg-brand flex items-center justify-center font-black text-lg hover:bg-brand-dark transition-colors" title="Back to Dashboard">W</button>
+            <div>
+              <div className="font-bold text-sm leading-tight">World Aware</div>
+              <div className="text-xs text-white/40 leading-tight">{plan?.profile?.companyName || 'Disaster Plan Builder'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <PhaseBar phase={phase}/>
+            {saveStatus==='saved' && <span className="saved-badge hidden sm:inline-flex">✓ Saved</span>}
+            <button onClick={() => doSave()} className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap">Save</button>
+          </div>
+        </div>
+      </header>
+
+      <div className="bg-white border-b border-gray-100 px-4 py-3">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
+          <div className="text-xs font-semibold text-gray-400">{stepLabel}</div>
+          <StepDots total={stepTotal} current={stepCurrent}/>
+        </div>
+      </div>
+
+      <main className="flex-1 px-4 py-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="card p-6 sm:p-8">
+            {phase===1 && p1step===0 && <StepProfile data={plan.profile} onChange={d => update('profile',{...plan.profile,...d})} errors={errors}/>}
+            {phase===1 && p1step===1 && <StepFunctions data={plan.functions} onChange={v => update('functions',v)} errors={errors}/>}
+            {phase===1 && p1step===2 && <StepPreparedness data={plan.preparedness} onChange={d => update('preparedness',{...plan.preparedness,...d})}/>}
+            {phase===1 && p1step===3 && <P1Review state={plan}/>}
+            {phase===2 && p2step===0 && <StepHazards selected={plan.selectedHazardIds} onChange={v => update('selectedHazardIds',v)} custom={plan.customHazards} onCustom={v => update('customHazards',v)}/>}
+            {phase===2 && p2step===1 && <RiskMatrix risks={plan.risks} onChange={v => { const n=update('risks',v); doSave(n); }} allHazards={allHazards}/>}
+            {phase===3 && <StepConfig config={plan.config} onChange={v => update('config',v)} risks={plan.risks}/>}
+          </div>
+
+          <div className="flex items-center justify-between mt-6">
+            <button onClick={phase===1?p1Prev:phase===2?p2Prev:()=>{setPhase(2);setP2step(1);window.scrollTo({top:0,behavior:'smooth'});}} className="btn-secondary">
+              ← {phase===2&&p2step===0?'Back to Review':phase===3?'Back to Matrix':'Previous'}
+            </button>
+            <button
+              onClick={phase===1?p1Next:phase===2?p2Next:p3Finish}
+              disabled={phase===2&&p2step===0&&plan.selectedHazardIds.length===0}
+              className="btn-primary"
+            >
+              {phase===1&&p1step===3 ? 'Continue to Risk Assessment →' :
+               phase===2&&p2step===1 ? 'Continue to Plan Config →' :
+               phase===3             ? 'Review & Generate Plan →' : 'Next →'}
+            </button>
+          </div>
+
+          {errors.hazards && <p className="error-msg text-center mt-2">{errors.hazards}</p>}
+        </div>
+      </main>
+      <WorldAwareFooter/>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
