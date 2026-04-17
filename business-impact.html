@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Business Impact Assessment — World Aware</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --orange:#E8650A;--navy:#1A1A2E;--navy2:#252545;
+  --green:#1D9E75;--green-light:#E1F5EE;--green-dark:#085041;
+  --amber:#EF9F27;--amber-light:#FAEEDA;--amber-dark:#633806;
+  --red:#E24B4A;--red-light:#FCEBEB;--red-dark:#A32D2D;
+  --crit-light:#F7C1C1;--crit-dark:#501313;
+  --text:#1A1A2E;--text2:#4a4a6a;--text3:#8888a8;
+  --bg:#f4f4f8;--surface:#fff;
+  --border:rgba(26,26,46,.09);--border2:rgba(26,26,46,.18);
+  --r:12px;--rsm:8px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* Header */
+.header{background:var(--navy);padding:0 20px;display:flex;align-items:center;justify-content:space-between;min-height:54px}
+.logo{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;letter-spacing:.14em;color:var(--orange)}
+.header-right{font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.06em}
+
+/* Container */
+.container{max-width:680px;margin:0 auto;padding:24px 16px 60px}
+
+/* Screen management */
+.screen{display:none}.screen.active{display:block}
+
+/* ── HAZARD PICKER ── */
+.intro{background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--r);border-left:3px solid var(--orange);padding:20px;margin-bottom:20px}
+.intro h1{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.intro p{font-size:13px;color:var(--text2);line-height:1.65}
+.intro-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.intro-tag{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);background:var(--bg);padding:4px 10px;border-radius:20px;border:0.5px solid var(--border2)}
+
+.cat-label{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-family:'DM Mono',monospace;margin:20px 0 8px}
+.cat-label:first-of-type{margin-top:0}
+.hazard-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+@media(max-width:480px){.hazard-grid{grid-template-columns:1fr}}
+.hazard-btn{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface);border:1.5px solid var(--border2);border-radius:var(--rsm);cursor:pointer;text-align:left;transition:all .15s;font-family:'DM Sans',sans-serif}
+.hazard-btn:hover{border-color:var(--orange);background:#fef5f0}
+.hazard-btn .h-icon{font-size:20px;flex-shrink:0}
+.hazard-btn .h-name{font-size:14px;font-weight:500;color:var(--navy)}
+.hazard-btn .h-cat{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px}
+
+/* ── ASSESSMENT SCREEN ── */
+.assessment-header{background:var(--navy2);border-radius:var(--r);padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px}
+.assessment-icon{font-size:28px;flex-shrink:0}
+.assessment-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:#fff}
+.assessment-sub{font-size:11px;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace;margin-top:3px}
+.back-btn{margin-left:auto;font-size:12px;color:rgba(255,255,255,.4);background:rgba(255,255,255,.08);border:0.5px solid rgba(255,255,255,.15);border-radius:6px;padding:6px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
+.back-btn:hover{color:#fff;background:rgba(255,255,255,.15)}
+
+/* Progress */
+.progress-wrap{margin-bottom:16px}
+.progress-track{height:2px;background:var(--border2);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--orange);border-radius:2px;transition:width .4s ease}
+.progress-meta{display:flex;justify-content:space-between;margin-top:6px}
+.progress-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3)}
+
+/* Question cards */
+.q-card{background:var(--surface);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;margin-bottom:8px;border-left:2.5px solid var(--orange);animation:slideUp .2s ease}
+.q-card.answered-yes{border-left-color:var(--green);opacity:.72}
+.q-card.answered-no{border-left-color:var(--border2);opacity:.65}
+.q-card.answered-na{border-left-color:var(--border2);opacity:.55}
+@keyframes slideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.q-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
+.q-weight{font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);background:var(--bg);border:0.5px solid var(--border2);border-radius:4px;padding:3px 7px;flex-shrink:0}
+.q-weight.high{color:var(--orange);border-color:rgba(232,101,10,.3);background:rgba(232,101,10,.06)}
+.q-text{font-size:15px;font-weight:500;color:var(--navy);line-height:1.4;margin-bottom:6px}
+
+.q-detail-btn{font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:3px;margin-bottom:8px;transition:color .15s}
+.q-detail-btn:hover{color:var(--navy)}
+.q-detail-btn .arr{transition:transform .2s;display:inline-block}
+.q-detail-btn.open .arr{transform:rotate(90deg)}
+.q-detail{font-size:13px;color:var(--text2);line-height:1.6;background:var(--bg);border-left:2px solid var(--border2);padding:10px 12px;border-radius:0 6px 6px 0;margin-bottom:10px;display:none}
+.q-detail.open{display:block;animation:fadeIn .18s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.btn-row{display:flex;gap:8px}
+.btn{flex:1;padding:9px 0;border-radius:var(--rsm);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--surface);color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif}
+.btn:hover{background:var(--bg);color:var(--navy)}
+.btn.yes.sel{background:var(--green-light);border-color:var(--green);color:var(--green-dark)}
+.btn.no.sel{background:#fef5f0;border-color:#D85A30;color:#712B13}
+.btn.na{flex:.55;font-size:11px;font-family:'DM Mono',monospace;color:var(--text3)}
+.btn.na.sel{background:var(--bg);border-color:var(--border2);color:var(--text2)}
+.connector{text-align:center;color:var(--text3);font-size:16px;margin:3px 0}
+
+/* Score panel */
+.score-panel{background:var(--surface);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;margin:14px 0 8px}
+.score-panel-label{font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:10px}
+.pips{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.pip{width:20px;height:20px;border-radius:50%;border:1px solid var(--border2);background:var(--bg);transition:all .25s}
+.pip.active{background:var(--green);border-color:var(--green-dark)}
+.pip.active.warn{background:var(--amber);border-color:var(--amber-dark)}
+.pip.active.danger{background:var(--red);border-color:var(--red-dark)}
+.pip.active.crit{background:var(--red-dark);border-color:#3b0f0f}
+.pip-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);margin-left:6px}
+
+/* Result */
+.result-card{border-radius:10px;padding:20px;margin-top:6px;animation:slideUp .3s ease}
+.result-card.low{background:var(--green-light);border:1px solid var(--green)}
+.result-card.medium{background:var(--amber-light);border:1px solid var(--amber)}
+.result-card.high{background:var(--red-light);border:1px solid var(--red)}
+.result-card.critical{background:var(--crit-light);border:1px solid var(--red-dark)}
+.result-eyebrow{font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;display:block}
+.result-card.low .result-eyebrow{color:var(--green-dark)}
+.result-card.medium .result-eyebrow{color:var(--amber-dark)}
+.result-card.high .result-eyebrow{color:var(--red-dark)}
+.result-card.critical .result-eyebrow{color:var(--crit-dark)}
+.result-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px}
+.result-body{font-size:14px;line-height:1.7;color:var(--text2)}
+.result-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.flag{font-size:11px;padding:4px 10px;border-radius:20px;font-family:'DM Mono',monospace}
+.flag.red{background:rgba(162,45,45,.1);color:var(--red-dark);border:0.5px solid rgba(162,45,45,.3)}
+.flag.amber{background:rgba(239,159,39,.12);color:var(--amber-dark);border:0.5px solid rgba(239,159,39,.4)}
+.result-coop{margin-top:14px;padding-top:12px;border-top:0.5px solid rgba(26,26,46,.1);font-size:13px;color:var(--text2);line-height:1.65}
+.result-coop a{color:var(--orange);text-decoration:none;font-weight:500}
+.result-coop a:hover{text-decoration:underline}
+
+/* Restart */
+.restart-wrap{text-align:center;margin-top:24px}
+.restart-btn{font-size:13px;color:var(--text3);background:none;border:0.5px solid var(--border2);border-radius:20px;padding:8px 20px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
+.restart-btn:hover{color:var(--navy);border-color:var(--navy)}
+
+/* Footer */
+.footer{text-align:center;margin-top:48px;font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);letter-spacing:.05em}
+.footer a{color:var(--orange);text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="logo">WORLD AWARE</span>
+  <span class="header-right">beworldaware.com</span>
+</div>
+
+<!-- ── SCREEN 1: HAZARD PICKER ── -->
+<div id="screen-pick" class="screen active">
+  <div class="container">
+    <div class="intro">
+      <h1>Business Impact Assessment</h1>
+      <p>Select the hazard you are assessing. You will be asked 6 targeted questions about how that specific hazard affects your organization — tied directly to your Business Continuity Plan priorities.</p>
+      <div class="intro-tags">
+        <span class="intro-tag">For: Owners · Ops · Safety · HR · Facilities</span>
+        <span class="intro-tag">6 questions per hazard</span>
+        <span class="intro-tag">Pairs with COOP/BCP Generator</span>
+      </div>
+    </div>
+    <div id="hazard-list"></div>
+    <div class="footer" style="margin-top:32px">
+      Emergency Preparedness for Everyone &nbsp;·&nbsp; <a href="https://beworldaware.com">beworldaware.com</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── SCREEN 2: ASSESSMENT ── -->
+<div id="screen-assess" class="screen">
+  <div class="container">
+    <div class="assessment-header" id="assess-header">
+      <span class="assessment-icon" id="assess-icon"></span>
+      <div>
+        <div class="assessment-title" id="assess-title"></div>
+        <div class="assessment-sub" id="assess-sub"></div>
+      </div>
+      <button class="back-btn" onclick="goBack()">← Change hazard</button>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="progress-meta">
+        <span class="progress-label" id="progress-label">0 of 6 questions answered</span>
+        <span class="progress-label" id="score-running" style="display:none"></span>
+      </div>
+    </div>
+
+    <div id="questions-wrap"></div>
+    <div id="score-panel" class="score-panel" style="display:none"></div>
+    <div id="result-wrap"></div>
+
+    <div class="restart-wrap">
+      <button class="restart-btn" onclick="goBack()">← Assess a different hazard</button>
+    </div>
+    <div class="footer">
+      Emergency Preparedness for Everyone &nbsp;·&nbsp; <a href="https://beworldaware.com">beworldaware.com</a>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── DATA ── */
+const HAZARDS = [
+  {id:'fire',          name:'Fire',                      icon:'🔥',cat:'Natural / Physical'},
+  {id:'flood',         name:'Flood',                     icon:'🌊',cat:'Natural / Physical'},
+  {id:'earthquake',    name:'Earthquake',                icon:'🌍',cat:'Natural / Physical'},
+  {id:'tornado',       name:'Tornado / Severe Storm',    icon:'🌪️',cat:'Natural / Physical'},
+  {id:'cyber',         name:'Cyber Attack / Ransomware', icon:'💻',cat:'Technological'},
+  {id:'power',         name:'Power Outage',              icon:'⚡',cat:'Technological'},
+  {id:'it-failure',    name:'IT System Failure',         icon:'🖥️',cat:'Technological'},
+  {id:'supply',        name:'Supply Chain Disruption',   icon:'🔗',cat:'Operational'},
+  {id:'key-person',    name:'Key Personnel Loss',        icon:'👤',cat:'Operational'},
+  {id:'pandemic',      name:'Pandemic / Disease',        icon:'🦠',cat:'Health'},
+  {id:'active-shooter',name:'Active Shooter / Violence', icon:'🚨',cat:'Security'},
+  {id:'data-breach',   name:'Data Breach',               icon:'🔓',cat:'Technological'},
+];
+
+const QUESTIONS = {
+  fire:[
+    {id:'evac-plan',    w:3,text:'Do you have a documented evacuation plan for all locations?',detail:'This includes posted exit routes, designated assembly points, floor wardens, and procedures for evacuating mobility-impaired staff. OSHA 29 CFR 1910.38 requires a written Emergency Action Plan for most employers.',flag:'No evacuation plan',invert:true},
+    {id:'fire-suppress',w:2,text:'Is your facility equipped with fire suppression systems (sprinklers, clean-agent for server rooms)?',detail:'Standard sprinklers protect structure but can destroy equipment. Server rooms and archival storage may require clean-agent suppression systems to avoid water damage to critical assets.',flag:'No suppression system',invert:true},
+    {id:'records-offsite',w:3,text:'Are your critical business records and data backed up offsite or in the cloud?',detail:'A fire that destroys your facility will also destroy any on-site backups. Cloud or offsite backup is essential for recovery. This directly affects your Recovery Point Objective (RPO).',flag:'No offsite backup',invert:true},
+    {id:'alt-location', w:3,text:'Do you have an alternate work location identified where operations could resume?',detail:'If your primary facility is destroyed or uninhabitable, where do employees go? Options include a secondary facility, coworking space, work-from-home, or a vendor/partner site. This must be documented, not improvised.',flag:'No alternate location',invert:true},
+    {id:'insurance',    w:2,text:'Do you have property and business interruption insurance reviewed within the last 2 years?',detail:'Business interruption insurance covers lost revenue and ongoing expenses while you rebuild. Many businesses discover their coverage is insufficient only after a loss.',flag:'Insurance not verified',invert:true},
+    {id:'equip-replace',w:2,text:'Would specialized equipment or machinery take more than 2 weeks to replace after a fire?',detail:'Long lead times on equipment replacement can extend your Recovery Time Objective (RTO) far beyond what customers or contracts will tolerate. Identify your longest-lead items now.',flag:'Long equipment lead times'},
+  ],
+  flood:[
+    {id:'flood-zone',   w:3,text:'Is any part of your facility located in a FEMA-designated flood zone (Zone A or V)?',detail:'Flood insurance is required for federally-backed mortgages in high-risk zones. Standard property insurance does NOT cover flood damage. Check your FEMA flood map at msc.fema.gov.',flag:'Facility in flood zone'},
+    {id:'flood-insurance',w:3,text:'Do you have a separate flood insurance policy?',detail:'Standard commercial property insurance excludes flood damage. Flood insurance through NFIP or private carriers must be purchased separately. There is typically a 30-day waiting period before coverage begins.',flag:'No flood insurance',invert:true},
+    {id:'equip-elevation',w:2,text:'Would a significant flood event damage critical equipment, inventory, or infrastructure at your facility?',detail:'Servers, electrical panels, HVAC equipment, and valuable inventory stored at ground level are at highest risk. Even a few inches of water can cause catastrophic damage to electronics and inventory.',flag:'Equipment at flood risk'},
+    {id:'records-offsite',w:3,text:'Are your critical business records and data stored offsite or in the cloud?',detail:'Flooding can destroy physical records and on-site servers simultaneously. Cloud backup ensures data survives even total facility loss.',flag:'No offsite backup',invert:true},
+    {id:'warning-time', w:2,text:'Would you have sufficient warning time to protect equipment or inventory before a flood event?',detail:'Riverine floods often provide days of warning; flash floods may provide minutes. Knowing your flood type and having a pre-planned response determines whether assets can be protected in time.',flag:'Insufficient warning time',invert:true},
+    {id:'alt-location', w:3,text:'Do you have an alternate work location if your facility is inaccessible for weeks?',detail:'Flood damage often makes facilities inaccessible for weeks or months due to remediation, mold, and structural repairs. Your alternate site must be fully operational.',flag:'No alternate location',invert:true},
+  ],
+  earthquake:[
+    {id:'seismic-zone',  w:3,text:'Is your facility located in a moderate to high seismic zone?',detail:'USGS seismic hazard maps show your area\'s peak ground acceleration. Buildings in high seismic zones without proper retrofitting face significant structural risk.',flag:'High seismic zone'},
+    {id:'structure',     w:3,text:'Has your building been structurally assessed for seismic vulnerability?',detail:'Unreinforced masonry buildings built before 1980 are at highest risk. Soft-story buildings are also vulnerable. A structural engineer can assess retrofit needs.',flag:'No seismic assessment',invert:true},
+    {id:'utility-shutoff',w:2,text:'Do employees know how to shut off gas and utilities, and are shutoffs clearly labeled?',detail:'Post-earthquake fires are often caused by gas leaks igniting. Automatic seismic gas shutoff valves can prevent this. Employees should know the location of all utility shutoffs.',flag:'Utility shutoffs unknown',invert:true},
+    {id:'records-offsite',w:3,text:'Are critical data and records backed up offsite or in the cloud?',detail:'A major earthquake can destroy on-site infrastructure and make the area inaccessible for days or weeks. Cloud backup is essential for any realistic recovery.',flag:'No offsite backup',invert:true},
+    {id:'supply-chain',  w:2,text:'Are your key suppliers or customers concentrated in the same seismic region as your facility?',detail:'A regional earthquake can simultaneously disable your facility, your suppliers, and your customers. Geographic concentration of your supply chain amplifies earthquake impact significantly.',flag:'Concentrated supply chain'},
+    {id:'alt-location',  w:3,text:'Is your alternate work location outside the same seismic impact zone (50+ miles away)?',detail:'An alternate site in the same city may be equally affected by a major earthquake. True resilience requires geographic separation.',flag:'Alt site in same zone'},
+  ],
+  tornado:[
+    {id:'shelter',       w:3,text:'Does your facility have a designated interior tornado shelter area employees know to use?',detail:'FEMA recommends sheltering in interior rooms on the lowest floor, away from windows. Wide-span roof structures (warehouses, open offices) are especially dangerous.',flag:'No tornado shelter',invert:true},
+    {id:'warning-system',w:2,text:'Do you have a reliable method for receiving and communicating tornado warnings to all employees?',detail:'Outdoor sirens may not be heard inside. A NOAA weather radio, mass notification system, or designated weather watcher ensures timely warnings reach all staff.',flag:'No warning system',invert:true},
+    {id:'roof-structure',w:3,text:'Does your building have a wide-span or vulnerable roof structure (warehouse, metal building, big-box)?',detail:'Metal buildings and warehouses with wide roof spans are at highest risk from tornado events. Even EF1 tornadoes (86–110 mph) can compromise these structures.',flag:'Vulnerable roof structure'},
+    {id:'records-offsite',w:3,text:'Are critical data and records backed up offsite or in the cloud?',detail:'A direct hit could destroy your facility and everything in it. Offsite or cloud backup is the only way to ensure data survives a total loss.',flag:'No offsite backup',invert:true},
+    {id:'insurance',     w:2,text:'Does your property insurance include wind and tornado damage with adequate limits?',detail:'Most commercial property policies cover wind damage, but some policies in high-risk areas have separate wind deductibles or exclusions. Verify your coverage limits and deductibles.',flag:'Wind coverage unclear',invert:true},
+    {id:'alt-location',  w:2,text:'Do you have an alternate work location if your facility is damaged or destroyed?',detail:'Tornado damage can be total and sudden. Your alternate site plan should be documented, tested, and communicated to all staff before an event occurs.',flag:'No alternate location',invert:true},
+  ],
+  cyber:[
+    {id:'backups',       w:3,text:'Do you maintain tested, air-gapped or immutable backups that cannot be encrypted by ransomware?',detail:'Ransomware attacks frequently target connected backup systems first. True resilience requires immutable backups — physically air-gapped, write-once cloud storage, or backups inaccessible from the compromised network. When was your last successful restore test?',flag:'Backups not ransomware-proof',invert:true},
+    {id:'cyber-insurance',w:3,text:'Do you have cyber liability insurance covering ransomware, incident response, and business interruption?',detail:'Cyber insurance policies vary widely. Key coverages: ransomware payments (if authorized), incident response costs, business interruption, regulatory fines, and third-party liability for breached customer data.',flag:'No cyber insurance',invert:true},
+    {id:'ir-plan',       w:3,text:'Do you have a documented Cyber Incident Response Plan with assigned roles and contacts?',detail:'When ransomware hits at 2am, who calls whom? What is isolated first? Who contacts the insurer? Organizations without a documented IR plan make costly decisions under pressure that extend recovery time significantly.',flag:'No incident response plan',invert:true},
+    {id:'msp-contract',  w:2,text:'Do you have a contract with an IT firm or MSP that includes 24/7 emergency response?',detail:'Ransomware does not wait for business hours. A managed service provider or incident response retainer with defined SLAs and emergency contacts is essential. Verbal agreements are not sufficient.',flag:'No emergency IT contract',invert:true},
+    {id:'rto',           w:3,text:'Would a complete ransomware lockout lasting more than 72 hours cause irreversible business harm?',detail:'Average ransomware recovery takes 21 days without paying. If your Maximum Tolerable Downtime is less than 72 hours, you need a significantly more mature backup and recovery capability.',flag:'RTO under 72 hours'},
+    {id:'third-party',   w:2,text:'Do key vendors or partners have access to your systems or data, creating third-party attack vectors?',detail:'Third-party access is one of the most common ransomware entry points. MSPs, accounting firms, law firms, and HR software vendors with privileged access should be assessed for their own security posture.',flag:'Third-party access risk'},
+  ],
+  power:[
+    {id:'backup-power',  w:3,text:'Do you have backup power (generator or UPS) sufficient to maintain critical operations?',detail:'A UPS provides minutes of power for graceful shutdown. A generator provides hours or days for critical operations. Know which systems are on backup power, what the runtime is, and how long refueling takes.',flag:'No backup power',invert:true},
+    {id:'critical-deps', w:3,text:'Are your most critical functions completely dependent on utility power with no manual alternative?',detail:'Identify which functions can continue without power (manually, on paper, offline) and which cannot. Functions with no offline alternative have zero resilience to power outages.',flag:'No manual fallback'},
+    {id:'rto-power',     w:3,text:'Would a power outage lasting more than 4 hours significantly impact revenue, commitments, or compliance?',detail:'Extended outages (24–72+ hours) from severe weather events are increasingly common. If your RTO is under 4 hours, backup power is not optional — it is a business continuity requirement.',flag:'RTO under 4 hours'},
+    {id:'perishables',   w:2,text:'Do you have temperature-sensitive inventory, medications, lab samples, or food that would be lost in a prolonged outage?',detail:'Refrigerated or climate-controlled goods can be destroyed within hours of power loss. Generator coverage for refrigeration and climate control is often overlooked in power planning.',flag:'Perishable assets at risk'},
+    {id:'remote-capable',w:2,text:'Can a significant portion of your workforce continue working remotely if your facility loses power?',detail:'If employees can work from home or another location with power, a facility outage is a disruption rather than a shutdown. This requires cloud-based systems, VPN access, and pre-communicated procedures.',flag:'No remote work capability',invert:true},
+    {id:'utility-risk',  w:1,text:'Has your area experienced extended power outages (4+ hours) more than once in the past 3 years?',detail:'Local utility reliability varies significantly by region. Areas with aging infrastructure, frequent severe weather, or high grid demand are at higher risk of extended outages.',flag:'Known utility reliability issues'},
+  ],
+  'it-failure':[
+    {id:'single-points', w:3,text:'Do any of your critical systems have single points of failure with no redundancy or failover?',detail:'A single server, a single internet connection, a single database — any one failing can halt operations. Redundancy (failover servers, dual ISPs, load balancing) directly determines your recovery time.',flag:'Single points of failure'},
+    {id:'rto-it',        w:3,text:'Would a complete IT system outage lasting more than 8 hours cause irreversible harm?',detail:'Define your actual Recovery Time Objective (RTO) for IT. Many businesses discover their informal assumption ("we\'ll be back up in an hour") bears no relationship to their actual recovery capability.',flag:'RTO under 8 hours'},
+    {id:'manual-backup', w:2,text:'Can any of your critical functions continue manually during an IT outage?',detail:'Organizations that can revert to manual processes for limited operations have dramatically better resilience. Document manual procedures for your top critical functions now, before you need them.',flag:'No manual fallback',invert:true},
+    {id:'vendor-sla',    w:2,text:'Do your critical software vendors provide guaranteed uptime SLAs with defined remedies?',detail:'Cloud services and SaaS platforms can fail independently of your internal IT. Know your vendors\' SLAs, how to escalate outages, and what compensation is available for violations.',flag:'No vendor SLAs',invert:true},
+    {id:'tested-backups',w:3,text:'Are your data backups tested at least quarterly with documented successful restore results?',detail:'Untested backups are not backups — they are assumptions. A backup that has never been restored may be corrupt or unrestorable in the format needed. Test restores before a crisis, not during one.',flag:'Untested backups',invert:true},
+    {id:'dr-plan',       w:2,text:'Do you have a documented IT Disaster Recovery plan with step-by-step restore procedures?',detail:'Who rebuilds the servers? In what order? From what media? With what credentials? Tribal knowledge in the head of one IT person is the most common IT DR gap in small to mid-sized businesses.',flag:'No IT DR plan',invert:true},
+  ],
+  supply:[
+    {id:'single-source', w:3,text:'Do you rely on a single supplier for any critical material, component, or service with no qualified alternative?',detail:'Single-source dependencies are the highest-risk supply chain vulnerability. A supplier bankruptcy, facility damage, or contract dispute can halt your operations with no immediate recourse.',flag:'Single-source dependencies'},
+    {id:'inventory-buffer',w:2,text:'Do you maintain at least 30 days of safety stock for your most critical materials or components?',detail:'Inventory buffers provide time to activate alternate suppliers before the disruption reaches your customers. The appropriate buffer depends on your lead times and supplier reliability.',flag:'No safety stock',invert:true},
+    {id:'geographic-conc',w:2,text:'Are two or more of your critical suppliers located in the same geographic region, creating concentration risk?',detail:'A regional disaster, port closure, or transportation disruption can simultaneously disable multiple suppliers in the same area. Geographic diversification reduces correlated risk.',flag:'Geographic supply concentration'},
+    {id:'contracts',      w:2,text:'Do your supplier contracts include business continuity requirements and notification obligations?',detail:'Without contractual BCP requirements, suppliers have no obligation to prioritize your orders during a crisis. Well-written supply agreements include continuity provisions and priority access.',flag:'No BCP contract terms',invert:true},
+    {id:'customer-impact',w:3,text:'Would a 30-day supply chain disruption cause you to breach contracts with customers or lose key accounts?',detail:'Measure supply chain impact in customer terms. If a disruption would trigger penalty clauses, contract terminations, or permanent customer loss, your supply chain risk has direct revenue consequences.',flag:'Customer contract breach risk'},
+    {id:'visibility',     w:2,text:'Do you have visibility into your Tier 2 suppliers — the suppliers of your suppliers?',detail:'Most supply chain disruptions originate at Tier 2 or Tier 3. The COVID-19 semiconductor shortage primarily exposed Tier 2 and 3 vulnerabilities that most companies had no visibility into.',flag:'No Tier 2 visibility',invert:true},
+  ],
+  'key-person':[
+    {id:'succession',    w:3,text:'Do you have a documented succession plan for your top 3 most critical positions?',detail:'A succession plan identifies who assumes each role temporarily, what authority they have, and what actions they take immediately. Without this, organizations stall waiting for direction.',flag:'No succession plan',invert:true},
+    {id:'tribal-knowledge',w:3,text:'Does any critical function depend on knowledge held by a single individual that is not documented anywhere?',detail:'The "bus factor" — how many people unavailable before operations halt — is often 1 in small businesses. Passwords, client relationships, vendor contacts, and system configurations held by one person are severe vulnerabilities.',flag:'Undocumented tribal knowledge'},
+    {id:'cross-training', w:2,text:'Have you cross-trained at least one backup for each critical function?',detail:'Cross-training is the only reliable mitigation for key-person risk. It requires intentional investment of time — not just documentation — to ensure backup personnel can actually perform the function under pressure.',flag:'No cross-training',invert:true},
+    {id:'key-person-insurance',w:2,text:'Do you have key-person life or disability insurance on critical executives or revenue-generating individuals?',detail:'Key-person insurance provides capital to hire and train a replacement, offset lost revenue, and service debt obligations. It is most commonly needed for founders, top salespeople, and technical specialists.',flag:'No key-person insurance',invert:true},
+    {id:'client-relationships',w:3,text:'Are key client relationships held primarily by one individual, creating vulnerability if that person leaves?',detail:'If a key account manager or principal leaves, will clients follow? Institutionalizing client relationships through team engagement and documented account plans reduces this risk.',flag:'Single-point client relationships'},
+    {id:'credential-access',w:2,text:'Do you have a documented process to immediately revoke and transfer system access when a key employee departs unexpectedly?',detail:'Sudden departures require immediate action on system credentials. Who has the master password list? Who can revoke access? Who is authorized to do so after hours?',flag:'No credential revocation process',invert:true},
+  ],
+  pandemic:[
+    {id:'remote-capability',w:3,text:'Can your organization continue at least 50% of operations with employees working remotely?',detail:'Pandemic response depends heavily on remote work capability. Organizations that cannot function remotely face total operational shutdown during quarantine orders or high absenteeism.',flag:'No remote work capability',invert:true},
+    {id:'absenteeism-plan',w:3,text:'Have you modeled what happens to operations if 30–40% of your workforce is simultaneously unavailable?',detail:'The 1918 pandemic saw 40%+ workforce absence at peak. Identify your minimum staffing threshold for each critical function and document how you would operate below that threshold.',flag:'No absenteeism contingency',invert:true},
+    {id:'supply-chain-health',w:2,text:'Are your critical suppliers located in regions that could be severely affected by a pandemic before you are?',detail:'COVID-19 demonstrated how a pandemic can disrupt supply chains weeks before it affects domestic operations. Suppliers in densely populated regions are at higher risk.',flag:'Supply chain pandemic risk'},
+    {id:'succession-pandemic',w:2,text:'If your senior leadership team is simultaneously incapacitated, is there a clear chain of command?',detail:'Pandemic scenarios can incapacitate entire leadership teams. Your succession plan must extend beyond replacing one person to cover scenarios where multiple leaders are unavailable.',flag:'Leadership succession gap',invert:true},
+    {id:'ppe-stockpile', w:1,text:'Do you maintain a stockpile of PPE, cleaning supplies, and essential health supplies for your workforce?',detail:'COVID-19 demonstrated how quickly PPE supply chains can fail. A 90-day stockpile of masks, gloves, and sanitizer provides time to source alternatives during supply disruptions.',flag:'No PPE stockpile',invert:true},
+    {id:'comms-system',  w:2,text:'Do you have a mass notification system that can reach all employees regardless of location?',detail:'During a pandemic, employees may be working from multiple locations without company equipment. Mass notification via SMS text alerts (not just company email) ensures all employees receive critical communications.',flag:'No mass notification system',invert:true},
+  ],
+  'active-shooter':[
+    {id:'run-hide-fight',w:3,text:'Have all employees been trained on Run-Hide-Fight within the last 12 months?',detail:'FEMA and DHS recommend annual active shooter training. The Run-Hide-Fight framework must be practiced, not just read. Untrained employees freeze. This is the single most impactful preparedness action.',flag:'No active shooter training',invert:true},
+    {id:'lockdown-procedure',w:3,text:'Do you have a documented lockdown procedure that can be activated within 60 seconds?',detail:'Lockdown requires locking and barricading doors, turning off lights, silencing phones, and staying out of sight. The procedure must be practiced. Employees in remote areas need specific guidance.',flag:'No lockdown procedure',invert:true},
+    {id:'physical-security',w:2,text:'Do you have access control systems (key card, buzz-in) that prevent unauthorized individuals from entering the facility?',detail:'Controlled access is the primary physical deterrent. Tailgating (following authorized staff through secured doors) is the most common bypass. Visitor management and access logging further reduce risk.',flag:'Uncontrolled facility access',invert:true},
+    {id:'threat-reporting',w:2,text:'Do employees have a clear, anonymous channel for reporting threatening behavior before it escalates?',detail:'The FBI\'s research shows nearly all mass workplace violence incidents were preceded by observable warning signs. An anonymous tip line and Threat Assessment Team can prevent incidents.',flag:'No threat reporting channel',invert:true},
+    {id:'trauma-support',  w:2,text:'Do you have an Employee Assistance Program (EAP) or trauma counseling that can be rapidly deployed post-incident?',detail:'The psychological aftermath of a workplace violence event can be as damaging as the physical event. Organizations without mental health response resources see extended absenteeism and turnover lasting months.',flag:'No trauma response resources',invert:true},
+    {id:'liability',       w:2,text:'Does your liability insurance cover workplace violence incidents and third-party injuries on your premises?',detail:'General liability policies vary in their coverage of workplace violence. Legal liability for failure to maintain a safe workplace can extend to third-party victims on your premises.',flag:'Violence coverage unclear',invert:true},
+  ],
+  'data-breach':[
+    {id:'sensitive-data',  w:3,text:'Does your organization store, process, or transmit sensitive personal data (PII, PHI, financial records, credentials)?',detail:'The regulatory consequences of a breach depend heavily on data type. HIPAA governs health information, PCI DSS governs payment cards, state privacy laws govern PII. Know what data you hold.',flag:'Sensitive data held'},
+    {id:'notification-law',w:3,text:'Do you know your breach notification obligations — who must be notified, in what timeframe, by what method?',detail:'All 50 states have breach notification laws with varying timelines (24 hours to 90 days). HIPAA requires notification within 60 days. GDPR requires 72 hours. Non-compliance adds regulatory fines.',flag:'Notification obligations unknown',invert:true},
+    {id:'cyber-insurance', w:3,text:'Do you have cyber liability insurance covering breach notification costs, credit monitoring, and regulatory fines?',detail:'Average breach costs for small businesses range from $120,000 to $1.24 million (IBM 2023). Cyber insurance typically covers: forensics, legal fees, notification, credit monitoring, and regulatory fines.',flag:'No cyber insurance',invert:true},
+    {id:'access-controls', w:2,text:'Do you enforce least-privilege access controls — employees access only data their job requires?',detail:'Overprivileged accounts are the most common enabler of data breaches. Access reviews should be conducted at least annually. This applies to both internal users and third-party integrations.',flag:'Overprivileged access'},
+    {id:'encryption',      w:2,text:'Is sensitive data encrypted both at rest (stored) and in transit (transmitted)?',detail:'Encryption limits breach consequences. Many state breach notification laws create safe harbors for encrypted data — if properly encrypted, notification may not be required even if data is accessed.',flag:'Data not fully encrypted',invert:true},
+    {id:'vendor-data',     w:2,text:'Do any vendors or partners store or process your customers\' sensitive data on your behalf?',detail:'Third-party data processors are your liability under most privacy laws. A breach at your payroll vendor, CRM, or cloud host may require you to notify affected individuals as if you were breached directly.',flag:'Third-party data exposure'},
+  ],
+};
+
+/* ── STATE ── */
+let currentHazard = null;
+let answers = {};
+let current = 0;
+
+function getQuestions() { return QUESTIONS[currentHazard.id] || []; }
+function getMaxScore() { return getQuestions().reduce((s,q) => s + q.w, 0); }
+
+function calcScore() {
+  let score = 0;
+  getQuestions().forEach((q,i) => {
+    const ans = answers[i];
+    if (!ans || ans === 'na') return;
+    const yes = ans === 'yes';
+    if (q.invert) { score += yes ? 0 : q.w; }
+    else          { score += yes ? q.w : 0; }
+  });
+  return score;
+}
+
+function getFlags() {
+  const flags = [];
+  getQuestions().forEach((q,i) => {
+    const ans = answers[i];
+    if (!ans || ans === 'na' || !q.flag) return;
+    const yes = ans === 'yes';
+    const triggered = q.invert ? !yes : yes;
+    if (triggered) flags.push({text: q.flag, w: q.w});
+  });
+  return flags;
+}
+
+/* ── HAZARD PICKER ── */
+function buildPicker() {
+  const cats = [...new Set(HAZARDS.map(h => h.cat))];
+  const list = document.getElementById('hazard-list');
+  list.innerHTML = '';
+  cats.forEach(cat => {
+    const label = document.createElement('div');
+    label.className = 'cat-label';
+    label.textContent = cat;
+    list.appendChild(label);
+    const grid = document.createElement('div');
+    grid.className = 'hazard-grid';
+    HAZARDS.filter(h => h.cat === cat).forEach(h => {
+      const btn = document.createElement('button');
+      btn.className = 'hazard-btn';
+      btn.innerHTML = `<span class="h-icon">${h.icon}</span><div><div class="h-name">${h.name}</div><div class="h-cat">${h.cat}</div></div>`;
+      btn.onclick = () => startAssessment(h);
+      grid.appendChild(btn);
+    });
+    list.appendChild(grid);
+  });
+}
+
+function startAssessment(hazard) {
+  currentHazard = hazard;
+  answers = {};
+  current = 0;
+  document.getElementById('assess-icon').textContent = hazard.icon;
+  document.getElementById('assess-title').textContent = hazard.name;
+  document.getElementById('assess-sub').textContent = '6 targeted impact questions · Aligned with your BCP priorities';
+  document.getElementById('score-panel').style.display = 'none';
+  document.getElementById('result-wrap').innerHTML = '';
+  document.getElementById('screen-pick').classList.remove('active');
+  document.getElementById('screen-assess').classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+  render();
+}
+
+function goBack() {
+  document.getElementById('screen-assess').classList.remove('active');
+  document.getElementById('screen-pick').classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ── RENDER ── */
+function render() {
+  const qs = getQuestions();
+  const wrap = document.getElementById('questions-wrap');
+  wrap.innerHTML = '';
+  const answered = Object.keys(answers).length;
+
+  qs.slice(0, current + 1).forEach((q, i) => {
+    const ans = answers[i];
+    const isYes = ans === 'yes';
+    const isNo  = ans === 'no';
+    const isNa  = ans === 'na';
+    const card = document.createElement('div');
+    card.className = 'q-card' + (ans ? (isYes ? ' answered-yes' : isNa ? ' answered-na' : ' answered-no') : '');
+    card.innerHTML = `
+      <div class="q-top">
+        <div class="q-text">${q.text}</div>
+        <span class="q-weight ${q.w >= 3 ? 'high' : ''}">weight ${q.w}</span>
+      </div>
+      <button class="q-detail-btn" id="dtgl-${i}" onclick="toggleDetail(${i})"><span class="arr">›</span> Why this matters for your BCP</button>
+      <div class="q-detail" id="detail-${i}">${q.detail}</div>
+      <div class="btn-row">
+        <button class="btn yes ${isYes?'sel':''}" onclick="answer(${i},'yes')">Yes</button>
+        <button class="btn no  ${isNo ?'sel':''}" onclick="answer(${i},'no')">No</button>
+        <button class="btn na  ${isNa ?'sel':''}" onclick="answer(${i},'na')">N/A</button>
+      </div>`;
+    wrap.appendChild(card);
+    if (i < current) {
+      const conn = document.createElement('div');
+      conn.className = 'connector';
+      conn.textContent = '↓';
+      wrap.appendChild(conn);
+    }
+  });
+
+  // Progress
+  const pct = Math.round((answered / qs.length) * 100);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = answered + ' of ' + qs.length + ' questions answered';
+  if (answered > 0) {
+    const sr = document.getElementById('score-running');
+    sr.style.display = 'block';
+    sr.textContent = 'Impact score: ' + calcScore() + '/' + getMaxScore();
+  }
+
+  if (answered === qs.length) { showScorePanel(); showResult(); }
+  else { document.getElementById('score-panel').style.display = 'none'; document.getElementById('result-wrap').innerHTML = ''; }
+}
+
+function toggleDetail(i) {
+  const d = document.getElementById('detail-' + i);
+  const t = document.getElementById('dtgl-' + i);
+  d.classList.toggle('open');
+  t.classList.toggle('open');
+}
+
+function answer(idx, val) {
+  answers[idx] = val;
+  if (idx === current && current < getQuestions().length - 1) {
+    current++;
+    setTimeout(() => {
+      const cards = document.querySelectorAll('.q-card');
+      const last = cards[cards.length - 1];
+      if (last) last.scrollIntoView({behavior:'smooth',block:'center'});
+    }, 100);
+  }
+  render();
+}
+
+function showScorePanel() {
+  const score = calcScore();
+  const max = getMaxScore();
+  const pct = score / max;
+  const cls = pct < 0.3 ? '' : pct < 0.55 ? 'warn' : pct < 0.75 ? 'danger' : 'crit';
+  const panel = document.getElementById('score-panel');
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="score-panel-label">Impact score — ${currentHazard.icon} ${currentHazard.name}</div>
+    <div class="pips">
+      ${Array.from({length: max}, (_,i) => `<div class="pip ${i < score ? 'active ' + cls : ''}"></div>`).join('')}
+      <span class="pip-label">${score} of ${max} impact points</span>
+    </div>`;
+}
+
+function showResult() {
+  const score = calcScore();
+  const max = getMaxScore();
+  const pct = score / max;
+  const flags = getFlags();
+  const highFlags = flags.filter(f => f.w >= 3);
+  const medFlags  = flags.filter(f => f.w === 2);
+  const h = currentHazard;
+
+  let cls, badge, body;
+  if (pct < 0.3) {
+    cls = 'low'; badge = 'Low business impact';
+    body = `A ${h.name.toLowerCase()} event would be disruptive but your organization has reasonable controls in place. Ensure your COOP/BCP documents the flagged items and that staff are trained on their roles.`;
+  } else if (pct < 0.55) {
+    cls = 'medium'; badge = 'Moderate business impact';
+    body = `A ${h.name.toLowerCase()} event poses meaningful risk to your operations. Address the flagged gaps below — they represent the highest-leverage improvements to your resilience for this hazard.`;
+  } else if (pct < 0.75) {
+    cls = 'high'; badge = 'High business impact';
+    body = `A ${h.name.toLowerCase()} event could significantly disrupt or disable your organization. The flagged items below should be prioritized immediately. A formal Business Continuity Plan for this hazard is strongly recommended.`;
+  } else {
+    cls = 'critical'; badge = 'Critical business impact';
+    body = `A ${h.name.toLowerCase()} event represents a critical threat to your organization's continuity and survival. Multiple high-weight gaps have been identified. Immediate action on the flagged items and a comprehensive BCP engagement with World Aware is strongly recommended.`;
+  }
+
+  const flagHtml = flags.length > 0 ? `
+    <div class="result-flags">
+      ${highFlags.map(f => `<span class="flag red">${f.text}</span>`).join('')}
+      ${medFlags.map(f => `<span class="flag amber">${f.text}</span>`).join('')}
+    </div>` : '';
+
+  document.getElementById('result-wrap').innerHTML = `
+    <div class="connector">↓</div>
+    <div class="result-card ${cls}">
+      <span class="result-eyebrow">${badge} · Score ${score}/${max}</span>
+      <div class="result-title">${h.icon} ${h.name} Impact Assessment</div>
+      <div class="result-body">${body}</div>
+      ${flagHtml}
+      <div class="result-coop">
+        Use the <strong>World Aware COOP/BCP Generator</strong> at <a href="https://plans.beworldaware.com" target="_blank">plans.beworldaware.com</a> to build a formal continuity plan that addresses these ${h.name.toLowerCase()} vulnerabilities — including IF-THEN response procedures, recovery checklists, and communication templates.
+      </div>
+    </div>`;
+}
+
+/* ── INIT ── */
+buildPicker();
+</script>
+</body>
+</html>
