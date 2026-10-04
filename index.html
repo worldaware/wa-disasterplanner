@@ -3,55 +3,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>World Aware — Disaster Plan Builder</title>
+  <title>Business Continuity Plan Builder | World Aware</title>
+  <meta name="theme-color" content="#4D0000" />
+  <link rel="icon" type="image/png" href="assets/wa-mark-full-color.png" />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/tokens.css" />
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="js/icons.js"></script>
   <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: '#FF6B35', navy: '#1A2238',
-            'brand-light': '#FFF0EB', 'brand-dark': '#E5541A',
-          }
-        }
-      }
+    /* Tailwind is kept for layout utilities only. Brand colors and fonts map to tokens.css;
+       preflight is off so it cannot reset the brand component styles in css/brand.css. */
+    if (window.tailwind) tailwind.config = {
+      corePlugins: { preflight: false },
+      theme: { extend: {
+        colors: { maroon: { DEFAULT:'var(--wa-maroon)', 50:'var(--maroon-50)', 600:'var(--maroon-600)', 700:'var(--maroon-700)' },
+                  amber: { DEFAULT:'var(--wa-amber)', 200:'var(--amber-200)', 600:'var(--amber-600)' },
+                  cream: 'var(--wa-cream)', ink: 'var(--color-text)', muted: 'var(--color-text-muted)',
+                  line: 'var(--color-border)', page: 'var(--color-bg)' },
+        fontFamily: { display: ['Space Grotesk','Segoe UI','Arial','sans-serif'], sans: ['Poppins','Segoe UI','Arial','sans-serif'] },
+        borderRadius: { sm:'4px', DEFAULT:'4px', md:'8px' } } }
     };
   </script>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F4F6F9; }
-    .input { width:100%; border:1.5px solid #D1D5DB; border-radius:8px; padding:10px 14px; font-size:14px; color:#1A2238; outline:none; transition:border-color .15s,box-shadow .15s; background:#fff; }
-    .input:focus { border-color:#FF6B35; box-shadow:0 0 0 3px rgba(255,107,53,.12); }
-    select.input { background:#fff; cursor:pointer; }
-    .btn-primary  { background:#FF6B35; color:#fff; font-weight:600; padding:11px 28px; border-radius:8px; border:none; cursor:pointer; font-size:15px; transition:background .15s,transform .1s; }
-    .btn-primary:hover    { background:#E5541A; }
-    .btn-primary:active   { transform:scale(.98); }
-    .btn-primary:disabled { opacity:.45; cursor:not-allowed; transform:none; }
-    .btn-secondary { background:#fff; color:#1A2238; font-weight:600; padding:11px 24px; border-radius:8px; border:1.5px solid #D1D5DB; cursor:pointer; font-size:15px; transition:all .15s; }
-    .btn-secondary:hover { border-color:#FF6B35; color:#FF6B35; }
-    .card  { background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.04); border:1px solid #E5E7EB; }
-    .label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }
-    .error-msg  { color:#DC2626; font-size:12px; margin-top:4px; }
-    .saved-badge { display:inline-flex; align-items:center; gap:6px; background:#ECFDF5; color:#065F46; font-size:12px; font-weight:600; padding:4px 12px; border-radius:999px; border:1px solid #A7F3D0; }
-    @keyframes pulse-ring { 0%,100%{opacity:1} 50%{opacity:.4} }
-    .pulse { animation: pulse-ring 1.5s ease-in-out infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media print {
-      body > * { visibility: hidden; }
-      #print-area, #print-area * { visibility: visible; }
-      #print-area { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 24px; }
-      .print-hidden { display: none !important; }
-    }
-  </style>
+  <link rel="stylesheet" href="css/brand.css" />
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 // ── Storage (multi-plan) ─────────────────────────────────────────────────────
 const DB_KEY = 'wa_plans_v1';
@@ -67,6 +50,8 @@ const LOC_RANGES    = ['1','2–3','4–10','11–25','26+'];
 const CRIT_REASONS  = ['Revenue generation','Regulatory requirement','Customer commitment','Safety / life safety','Legal obligation','Core product delivery'];
 const DOWNTIME_OPTS = ['2 hours','4 hours','8 hours','24 hours','3 days','7 days','30 days'];
 
+// NOTE: `icon` values are kept as-is because they are copied into saved risks (localStorage).
+// They are never rendered. The UI uses HAZARD_ICON (Lucide names) instead.
 const HAZARD_LIST = [
   {id:'fire',          name:'Fire',                      icon:'🔥', cat:'Natural / Physical'},
   {id:'flood',         name:'Flood',                     icon:'🌊', cat:'Natural / Physical'},
@@ -81,6 +66,8 @@ const HAZARD_LIST = [
   {id:'active-shooter',name:'Active Shooter / Violence', icon:'🚨', cat:'Security'},
   {id:'data-breach',   name:'Data Breach',               icon:'🔓', cat:'Technological'},
 ];
+const HAZARD_ICON = { fire:'flame', flood:'waves', earthquake:'activity', tornado:'tornado', cyber:'shield-alert', power:'plug-zap', 'it-failure':'server', supply:'truck', 'key-person':'user-x', pandemic:'biohazard', 'active-shooter':'siren', 'data-breach':'lock-open' };
+const hazardIcon = id => HAZARD_ICON[id] || 'circle-dashed';
 const CATS = [...new Set(HAZARD_LIST.map(h => h.cat))];
 
 const L_LABELS = ['Rare','Unlikely','Possible','Likely','Almost Certain'];
@@ -96,18 +83,20 @@ const REQUIRED_SECTIONS = [
 ];
 
 const ANNEXES = [
-  { id:'natural',      title:'Natural Disasters',                   subtitle:'Fire, flood, earthquake, severe weather procedures',           icon:'🌪️', triggers:['fire','flood','earthquake','tornado'] },
-  { id:'cyber-it',     title:'Cyber Incidents & IT Failure',        subtitle:'Ransomware, data breach, system outage, IT recovery',          icon:'💻', triggers:['cyber','it-failure','data-breach','power'] },
-  { id:'violence',     title:'Active Shooter / Workplace Violence',  subtitle:'Security incidents, lockdown, and evacuation procedures',       icon:'🚨', triggers:['active-shooter'] },
-  { id:'key-person',   title:'Leadership Loss / Key Personnel',      subtitle:'Succession planning and knowledge transfer protocols',          icon:'👤', triggers:['key-person'] },
-  { id:'pandemic',     title:'Pandemic Response',                    subtitle:'Disease outbreak and public health emergency procedures',        icon:'🦠', triggers:['pandemic'] },
-  { id:'supply-chain', title:'Supply Chain Disruption',             subtitle:'Vendor failure, procurement continuity, and alternate sourcing', icon:'🔗', triggers:['supply'] },
+  { id:'natural',      title:'Natural Disasters',                   subtitle:'Fire, flood, earthquake, severe weather procedures',           icon:'tornado',      triggers:['fire','flood','earthquake','tornado'] },
+  { id:'cyber-it',     title:'Cyber Incidents & IT Failure',        subtitle:'Ransomware, data breach, system outage, IT recovery',          icon:'shield-alert', triggers:['cyber','it-failure','data-breach','power'] },
+  { id:'violence',     title:'Active Shooter / Workplace Violence',  subtitle:'Security incidents, lockdown, and evacuation procedures',       icon:'siren',        triggers:['active-shooter'] },
+  { id:'key-person',   title:'Leadership Loss / Key Personnel',      subtitle:'Succession planning and knowledge transfer protocols',          icon:'user-x',       triggers:['key-person'] },
+  { id:'pandemic',     title:'Pandemic Response',                    subtitle:'Disease outbreak and public health emergency procedures',        icon:'biohazard',    triggers:['pandemic'] },
+  { id:'supply-chain', title:'Supply Chain Disruption',             subtitle:'Vendor failure, procurement continuity, and alternate sourcing', icon:'truck',        triggers:['supply'] },
 ];
 
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2,6)}`; }
 function score(r)  { return r.likelihood * r.impact; }
-function levelOf(s){ if(s>=15)return{label:'Critical',bg:'#FEE2E2',text:'#991B1B',border:'#FCA5A5'}; if(s>=10)return{label:'High',bg:'#FFEDD5',text:'#9A3412',border:'#FDBA74'}; if(s>=5)return{label:'Medium',bg:'#FEF9C3',text:'#854D0E',border:'#FDE047'}; return{label:'Low',bg:'#DCFCE7',text:'#166534',border:'#86EFAC'}; }
-function cellColor(l,i){ const s=l*i; if(s>=15)return'#EF4444'; if(s>=10)return'#F97316'; if(s>=5)return'#EAB308'; return'#22C55E'; }
+// Risk bands match the World Aware scale used across all tools: Low 1-5, Moderate 6-9, High 10-14, Critical 15-25.
+// Only the colors changed: one ordinal brand ramp, always shown with a word label and a meter.
+function levelOf(s){ if(s>=15)return{label:'Critical',cls:'b-crit',lvl:4}; if(s>=10)return{label:'High',cls:'b-high',lvl:3}; if(s>=6)return{label:'Moderate',cls:'b-mod',lvl:2}; return{label:'Low',cls:'b-low',lvl:1}; }
+const BAND_ACTION = { Critical:'Act now', High:'Write a specific plan', Moderate:'Cover in general preparedness', Low:'Monitor' };
 
 // Smart annex recommendation based on HIGH/CRITICAL risks (score ≥ 10)
 function computeRecommended(risks) {
@@ -117,21 +106,6 @@ function computeRecommended(risks) {
 
 const INIT_FN = () => ({ id: uid(), name: '', reason: '', downtime: '' });
 const TODAY = new Date().toISOString().slice(0, 10);
-const INIT = {
-  profile:      { companyName:'', industry:'', employees:'', locations:'', address:'' },
-  functions:    [INIT_FN()],
-  preparedness: { hasExistingPlan:null, hasBackupPower:null, remoteWork:'', hasOffsiteBackup:null },
-  risks:        [],
-  selectedHazardIds: [],
-  customHazards:     [],
-  config: {
-    selectedAnnexes: [],
-    consultantName:    '',
-    consultantCompany: 'World Aware',
-    planVersion:       '1.0',
-    planDate:          TODAY,
-  },
-};
 
 function newPlan() {
   return {
@@ -153,109 +127,168 @@ function newPlan() {
     },
   };
 }
+function fmtDate(iso) {
+  if(!iso) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if(!m) return iso;
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  return d.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+}
+function safeFileName(s) { return (s||'Company').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_'); }
+
+// ── Icons (Lucide, inline SVG from js/icons.js) ──────────────────────────────
+function Icon({ name, size = 20, className = '' }) {
+  return <svg className={`wa-ic ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" dangerouslySetInnerHTML={{__html: (window.WA_ICONS||{})[name] || ''}}/>;
+}
 
 // ── Shared UI ────────────────────────────────────────────────────────────────
-function Field({ label, required, error, hint, tooltip, children }) {
+function RiskBadge({ s }) {
+  const lv = levelOf(s);
+  return <span className={`badge ${lv.cls}`}><span className="meter" aria-hidden="true">{[1,2,3,4].map(i => <i key={i} className={i<=lv.lvl?'f':''}/>)}</span>{lv.label}</span>;
+}
+let fieldSeq = 0;
+function Field({ label, required, optional, error, hint, tooltip, children, id }) {
+  const [fid] = useState(() => id || `f${++fieldSeq}`);
+  const child = React.Children.only(children);
+  const describedBy = [hint ? `${fid}-h` : null, error ? `${fid}-e` : null].filter(Boolean).join(' ') || undefined;
   return (
-    <div>
-      <label className="label">{label}{required && <span className="text-red-500 ml-0.5">*</span>}{tooltip && <Tooltip text={tooltip}/>}</label>
-      {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
-      {children}
-      {error && <p className="error-msg">{error}</p>}
+    <div className="field">
+      <div className="label"><label htmlFor={fid}>{label}{optional && <span className="opt"> (optional)</span>}</label>{tooltip && <Tooltip text={tooltip} label={label}/>}</div>
+      {React.cloneElement(child, { id: fid, 'aria-invalid': error ? 'true' : undefined, 'aria-describedby': describedBy })}
+      {hint && <p className="help" id={`${fid}-h`}>{hint}</p>}
+      {error && <p className="errmsg" id={`${fid}-e`}><Icon name="circle-alert" size={16}/>{error}</p>}
     </div>
   );
 }
 function TInput({ value, onChange, placeholder, ...r }) { return <input className="input" value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} {...r} />; }
-function Select({ value, onChange, options, placeholder = 'Select…' }) { return <select className="input" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select>; }
-function YesNo({ value, onChange, opts }) {
+function Select({ value, onChange, options, placeholder = 'Select…', ...r }) {
+  return <div className="select-wrap"><select className="input" value={value} onChange={e => onChange(e.target.value)} {...r}><option value="">{placeholder}</option>{options.map(o => <option key={o} value={o}>{o}</option>)}</select><Icon name="chevron-down"/></div>;
+}
+function YesNo({ value, onChange, opts, label }) {
   const o = opts || [{ label:'Yes', value:'yes' }, { label:'No', value:'no' }];
-  return <div className="flex gap-3 flex-wrap">{o.map(op => <button key={op.value} type="button" onClick={() => onChange(op.value)} className={`px-5 py-2.5 rounded-lg font-semibold text-sm border-2 transition-all ${value === op.value ? 'border-brand bg-brand-light text-brand' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'}`}>{op.label}</button>)}</div>;
+  return <div className="seg" role="group" aria-label={label}>{o.map(op => <button key={op.value} type="button" aria-pressed={value === op.value} onClick={() => onChange(op.value)}>{op.label}</button>)}</div>;
 }
 function Checkbox({ checked, onChange, children }) {
   return (
-    <button type="button" onClick={() => onChange(!checked)} className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all ${checked ? 'border-brand bg-brand-light' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${checked ? 'bg-brand border-brand' : 'border-gray-300'}`}>
-        {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
-      </div>
+    <button type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(!checked)} className={`check ${checked ? 'on' : ''}`}>
+      <span className="box">{checked && <Icon name="check" size={16}/>}</span>
       {children}
     </button>
   );
 }
 
-function Tooltip({ text }) {
+function Tooltip({ text, label }) {
   const [show, setShow] = useState(false);
   return (
-    <span className="relative inline-flex items-center ml-1 align-middle">
-      <button type="button" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
-        onClick={e => { e.preventDefault(); setShow(s => !s); }}
-        className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold flex items-center justify-center hover:bg-brand hover:text-white transition-all flex-shrink-0"
-        aria-label="Help">?</button>
-      {show && (
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-navy text-white text-xs rounded-lg p-2.5 shadow-xl z-50 leading-relaxed font-normal normal-case tracking-normal pointer-events-none" style={{whiteSpace:'normal'}}>
-          {text}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0" style={{borderLeft:'5px solid transparent',borderRight:'5px solid transparent',borderTop:'5px solid #1A2238'}}/>
-        </span>
-      )}
+    <span className="tip-wrap" onMouseLeave={() => setShow(false)}>
+      <button type="button" className="tip-btn" aria-expanded={show} aria-label={`About ${label || 'this field'}`}
+        onMouseEnter={() => setShow(true)} onFocus={() => setShow(true)} onBlur={() => setShow(false)}
+        onClick={e => { e.preventDefault(); setShow(s => !s); }}>
+        <Icon name="info" size={16}/>
+      </button>
+      {show && <span className="tip-pop" role="tooltip">{text}</span>}
     </span>
   );
 }
 
 function WorldAwareFooter() {
   return (
-    <footer className="bg-navy text-center py-4 px-4 mt-auto">
-      <p className="text-white/40 text-xs">
-        <span className="font-semibold text-white/60">World Aware</span>
-        {' · '}
-        <a href="https://beworldaware.com" target="_blank" rel="noopener noreferrer" className="text-brand hover:text-brand-dark underline transition-colors">beworldaware.com</a>
-        {' · '}
-        Disaster Plan Builder
-      </p>
+    <footer className="app-foot">
+      <span>World Aware Emergency Planning, Boulder, Colorado</span>
+      <a href="https://beworldaware.com" target="_blank" rel="noopener noreferrer">beworldaware.com</a>
     </footer>
   );
 }
+function Alert({ tone = 'info', title, children, icon }) {
+  const ic = icon || { info:'info', ok:'circle-check', warn:'triangle-alert', err:'circle-alert', note:'info' }[tone];
+  return <div className={`alert a-${tone}`} role={tone==='err'?'alert':undefined}><Icon name={ic}/><div>{title && <b>{title}</b>}<div className="body">{children}</div></div></div>;
+}
+function StepHead({ phase, title, children }) {
+  return <header className="step-head"><span className="phase">{phase}</span><h1>{title}</h1>{children && <p>{children}</p>}</header>;
+}
 
-// ── Phase / Step indicators ──────────────────────────────────────────────────
-function PhaseBar({ phase }) {
-  const phases = [{n:1,label:'Client Intake'},{n:2,label:'Risk Assessment'},{n:3,label:'Plan Config'}];
+// ── Wizard steps (a real sequence, so numbered) ──────────────────────────────
+const STEPS = [
+  { key:'p1-0', group:'Client intake',      label:'Company profile' },
+  { key:'p1-1', group:'Client intake',      label:'Critical functions' },
+  { key:'p1-2', group:'Client intake',      label:'Preparedness' },
+  { key:'p1-3', group:'Client intake',      label:'Intake review' },
+  { key:'p2-0', group:'Risk assessment',    label:'Select hazards' },
+  { key:'p2-1', group:'Risk assessment',    label:'Risk matrix' },
+  { key:'p3',   group:'Plan configuration', label:'Sections and annexes' },
+  { key:'ready',group:'Plan configuration', label:'Generate plan' },
+];
+function stepIndex(phase, p1step, p2step, ready) {
+  if(ready) return 7;
+  if(phase===1) return p1step;
+  if(phase===2) return 4 + p2step;
+  return 6;
+}
+function stepNote(i, plan) {
+  if(!plan) return null;
+  if(i===1) { const n = plan.functions.filter(f => f.name.trim()).length; return `${n} of ${plan.functions.length} named`; }
+  if(i===4) return `${plan.selectedHazardIds.length} selected`;
+  if(i===5) { const ids = new Set(plan.risks.map(r=>r.id)); const n = plan.selectedHazardIds.filter(id => ids.has(id)).length; return `${n} of ${plan.selectedHazardIds.length} rated`; }
+  if(i===6) return `${plan.config.selectedAnnexes.length} annex${plan.config.selectedAnnexes.length!==1?'es':''}`;
+  return null;
+}
+function StepRail({ current, plan, onGo }) {
+  const groups = [...new Set(STEPS.map(s => s.group))];
   return (
-    <div className="flex items-center gap-1 text-xs font-semibold">
-      {phases.map((p, i) => (
-        <React.Fragment key={p.n}>
-          {i > 0 && <div className={`w-5 h-0.5 ${phase >= p.n ? 'bg-brand' : 'bg-gray-600'}`}/>}
-          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full transition-all ${phase === p.n ? 'bg-brand text-white' : phase > p.n ? 'bg-green-500 text-white' : 'bg-white/10 text-white/40'}`}>
-            {phase > p.n ? '✓' : p.n} <span className="hidden sm:inline">{p.label}</span>
-          </div>
-        </React.Fragment>
+    <div className="rail-steps">
+      {groups.map(g => (
+        <div key={g}>
+          <p className="rail-group">{g}</p>
+          <ol className="steps">
+            {STEPS.map((s, i) => s.group !== g ? null : (() => {
+              const state = i < current ? 'done' : i === current ? 'cur' : 'up';
+              const lastInGroup = !STEPS[i+1] || STEPS[i+1].group !== g;
+              const note = i === current ? stepNote(i, plan) : null;
+              const inner = <>
+                <span className="n">{state==='done' ? <Icon name="check" size={16}/> : i+1}</span>
+                <span className="t">{s.label}{note && <small>{note}</small>}</span>
+              </>;
+              return (
+                <li key={s.key} className={`${state} ${lastInGroup?'last':''}`}>
+                  {state==='done'
+                    ? <button type="button" className="step" onClick={() => onGo(i)}><span className="sr-only">Done: </span>{inner}</button>
+                    : <div className="step" aria-current={state==='cur'?'step':undefined}>{inner}</div>}
+                </li>
+              );
+            })())}
+          </ol>
+        </div>
       ))}
     </div>
   );
 }
-function StepDots({ total, current }) {
+function MobileStep({ current }) {
   return (
-    <div className="flex items-center gap-2 justify-center">
-      {Array.from({length: total}).map((_, i) => (
-        <div key={i} className={`rounded-full transition-all ${i === current ? 'w-5 h-2 bg-brand' : i < current ? 'w-2 h-2 bg-green-400' : 'w-2 h-2 bg-gray-200'}`}/>
-      ))}
+    <div className="mstep">
+      <div className="mstep-top"><b>{STEPS[current].label}</b><span>Step {current+1} of {STEPS.length}</span></div>
+      <div className="mbar" style={{gridTemplateColumns:`repeat(${STEPS.length},1fr)`}} aria-hidden="true">
+        {STEPS.map((s,i) => <i key={s.key} className={i<current?'d':i===current?'c':''}/>)}
+      </div>
     </div>
   );
 }
 
 // ── PHASE 1 ──────────────────────────────────────────────────────────────────
-const P1_LABELS = ['Company Profile','Critical Functions','Preparedness','Review'];
-
 function StepProfile({ data, onChange, errors }) {
   const f = k => v => onChange({[k]: v});
   return (
-    <div className="space-y-5">
-      <div><h2 className="text-xl font-bold text-navy">Company Profile</h2><p className="text-gray-500 text-sm mt-1">Tell us about your organization so we can tailor your disaster plan.</p></div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Company Name" required error={errors.companyName} tooltip="The legal or operating name of the client organization. This appears on the cover page and throughout the generated plan."><TInput value={data.companyName} onChange={f('companyName')} placeholder="Acme Corporation"/></Field>
-        <Field label="Industry / Sector" required error={errors.industry} tooltip="Used to tailor risk recommendations and regulatory references in the plan."><Select value={data.industry} onChange={f('industry')} options={INDUSTRIES} placeholder="Select industry…"/></Field>
-      </div>
-      <Field label="Primary Address"><TInput value={data.address} onChange={f('address')} placeholder="123 Main St, City, State, ZIP"/></Field>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Number of Employees" required error={errors.employees} tooltip="Helps size response procedures and staffing requirements in the plan."><Select value={data.employees} onChange={f('employees')} options={EMP_RANGES} placeholder="Select range…"/></Field>
-        <Field label="Number of Locations" required error={errors.locations} tooltip="Multi-location organizations require additional coordination procedures. Each location may have different hazard profiles."><Select value={data.locations} onChange={f('locations')} options={LOC_RANGES} placeholder="Select range…"/></Field>
+    <div>
+      <StepHead phase="Client intake" title="Company profile">Tell us about the organization so the plan reflects how it actually operates.</StepHead>
+      <div className="stack">
+        <div className="fields-2">
+          <Field label="Company name" error={errors.companyName} tooltip="The legal or operating name of the client organization. This appears on the cover page and throughout the generated plan."><TInput value={data.companyName} onChange={f('companyName')} placeholder="Pearl Street Roasters" autoComplete="organization"/></Field>
+          <Field label="Industry or sector" error={errors.industry} tooltip="Used to tailor risk recommendations and regulatory references in the plan."><Select value={data.industry} onChange={f('industry')} options={INDUSTRIES} placeholder="Select industry…"/></Field>
+        </div>
+        <Field label="Primary address" optional><TInput value={data.address} onChange={f('address')} placeholder="1600 Pearl Street, Boulder CO 80302" autoComplete="street-address"/></Field>
+        <div className="fields-2">
+          <Field label="Number of employees" error={errors.employees} tooltip="Helps size response procedures and staffing requirements in the plan."><Select value={data.employees} onChange={f('employees')} options={EMP_RANGES} placeholder="Select range…"/></Field>
+          <Field label="Number of locations" error={errors.locations} tooltip="Multi-location organizations require additional coordination procedures. Each location may have different hazard profiles."><Select value={data.locations} onChange={f('locations')} options={LOC_RANGES} placeholder="Select range…"/></Field>
+        </div>
       </div>
     </div>
   );
@@ -264,19 +297,18 @@ function StepProfile({ data, onChange, errors }) {
 function FnCard({ fn, index, onChange, onRemove, canRemove, error }) {
   const set = k => v => onChange({...fn, [k]: v});
   return (
-    <div className={`border-2 rounded-xl p-4 transition-all ${error ? 'border-red-300 bg-red-50' : 'border-gray-100 bg-gray-50 hover:border-brand/30'}`}>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Function {index+1}</span>
-        {canRemove && <button onClick={onRemove} className="text-gray-300 hover:text-red-400 text-xl leading-none transition-colors">×</button>}
+    <div className={`fn ${error ? 'err' : ''}`}>
+      <div className="fn-head">
+        <b>Function {index+1}</b>
+        {canRemove && <button type="button" onClick={onRemove} className="btn btn-ghost btn-sm danger" aria-label={`Remove function ${index+1}`}><Icon name="trash-2" size={16}/>Remove</button>}
       </div>
-      <div className="space-y-3">
-        <Field label="Function Name" required>
-          <TInput value={fn.name} onChange={set('name')} placeholder="e.g. Order processing, Patient care, Financial reporting"/>
-          {error?.name && <p className="error-msg">{error.name}</p>}
+      <div className="stack">
+        <Field label="Function name" error={error?.name}>
+          <TInput value={fn.name} onChange={set('name')} placeholder="Order processing, patient care, payroll"/>
         </Field>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Why it's critical" tooltip="The primary business justification. Used to prioritize recovery efforts and explain the function's importance in the plan."><Select value={fn.reason} onChange={set('reason')} options={CRIT_REASONS} placeholder="Select reason…"/></Field>
-          <Field label="Max tolerable downtime" tooltip="Maximum Tolerable Downtime (MTD) — how long this function can be offline before causing unacceptable harm to the business."><Select value={fn.downtime} onChange={set('downtime')} options={DOWNTIME_OPTS} placeholder="Select timeframe…"/></Field>
+        <div className="fields-2">
+          <Field label="Why it's critical" optional tooltip="The primary business justification. Used to prioritize recovery efforts and explain the function's importance in the plan."><Select value={fn.reason} onChange={set('reason')} options={CRIT_REASONS} placeholder="Select reason…"/></Field>
+          <Field label="Max tolerable downtime" optional tooltip="Maximum Tolerable Downtime (MTD): how long this function can be offline before causing unacceptable harm to the business."><Select value={fn.downtime} onChange={set('downtime')} options={DOWNTIME_OPTS} placeholder="Select timeframe…"/></Field>
         </div>
       </div>
     </div>
@@ -285,13 +317,13 @@ function FnCard({ fn, index, onChange, onRemove, canRemove, error }) {
 
 function StepFunctions({ data, onChange, errors }) {
   return (
-    <div className="space-y-5">
-      <div><h2 className="text-xl font-bold text-navy">Critical Business Functions</h2><p className="text-gray-500 text-sm mt-1">What are the 1–5 functions that <strong>must continue</strong> during a disaster?</p></div>
-      <div className="space-y-3">
+    <div>
+      <StepHead phase="Client intake" title="Critical business functions">List the one to five functions that must continue during a disruption.</StepHead>
+      <div className="stack">
         {data.map((fn, i) => <FnCard key={fn.id} fn={fn} index={i} onChange={u => onChange(data.map((f,j) => j===i?u:f))} onRemove={() => onChange(data.filter((_,j) => j!==i))} canRemove={data.length > 1} error={errors[i]}/>)}
+        {data.length < 5 && <button type="button" onClick={() => onChange([...data, INIT_FN()])} className="add-row"><Icon name="plus"/>Add another function ({data.length} of 5)</button>}
+        {errors._general && <p className="errmsg"><Icon name="circle-alert" size={16}/>{errors._general}</p>}
       </div>
-      {data.length < 5 && <button onClick={() => onChange([...data, INIT_FN()])} className="w-full border-2 border-dashed border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-400 hover:border-brand hover:text-brand transition-all">+ Add another function ({data.length}/5)</button>}
-      {errors._general && <p className="error-msg text-sm">{errors._general}</p>}
     </div>
   );
 }
@@ -299,21 +331,23 @@ function StepFunctions({ data, onChange, errors }) {
 function StepPreparedness({ data, onChange }) {
   const f = k => v => onChange({[k]: v});
   const Q = ({ label, sub, val, ok, opts }) => (
-    <div className="py-4 border-b border-gray-100 last:border-0">
-      <div className="mb-3"><p className="text-sm font-semibold text-navy">{label}</p>{sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}</div>
-      <YesNo value={val} onChange={ok} opts={opts}/>
+    <div className="q-row">
+      <p className="q">{label}{sub && <small>{sub}</small>}</p>
+      <YesNo value={val} onChange={ok} opts={opts} label={label}/>
     </div>
   );
   return (
-    <div className="space-y-5">
-      <div><h2 className="text-xl font-bold text-navy">Current Preparedness</h2><p className="text-gray-500 text-sm mt-1">Help us understand what you already have in place — no judgment, just information.</p></div>
-      <div className="card p-0 overflow-hidden">
-        <Q label="Do you have an existing emergency / continuity plan?" sub="Any documented plan for responding to disasters." val={data.hasExistingPlan} ok={f('hasExistingPlan')}/>
-        <Q label="Do you have backup power (generator or UPS)?" sub="Equipment to maintain power at your primary location(s)." val={data.hasBackupPower} ok={f('hasBackupPower')}/>
-        <Q label="Can your employees work remotely?" sub="Technology and policies for remote operations." val={data.remoteWork} ok={f('remoteWork')} opts={[{label:'Yes — all',value:'yes-all'},{label:'Partially',value:'partial'},{label:'No',value:'no'}]}/>
-        <Q label="Do you have offsite or cloud data backups?" sub="Data stored separate from your primary site." val={data.hasOffsiteBackup} ok={f('hasOffsiteBackup')}/>
+    <div>
+      <StepHead phase="Client intake" title="Current preparedness">What is already in place today. Gaps become priority action items in the plan.</StepHead>
+      <div className="stack">
+        <div className="rows">
+          <Q label="Do you have an existing emergency or continuity plan?" sub="Any documented plan for responding to disasters." val={data.hasExistingPlan} ok={f('hasExistingPlan')}/>
+          <Q label="Do you have backup power (generator or UPS)?" sub="Equipment to maintain power at your primary location(s)." val={data.hasBackupPower} ok={f('hasBackupPower')}/>
+          <Q label="Can your employees work remotely?" sub="Technology and policies for remote operations." val={data.remoteWork} ok={f('remoteWork')} opts={[{label:'Yes, all',value:'yes-all'},{label:'Partially',value:'partial'},{label:'No',value:'no'}]}/>
+          <Q label="Do you have offsite or cloud data backups?" sub="Data stored separate from your primary site." val={data.hasOffsiteBackup} ok={f('hasOffsiteBackup')}/>
+        </div>
+        <Alert tone="note" title="Why these four">They are the most predictive factors in how quickly an organization recovers from a disruption.</Alert>
       </div>
-      <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800"><strong>Why this matters:</strong> These four items are the most predictive factors in how quickly an organization recovers from a disaster.</div>
     </div>
   );
 }
@@ -321,21 +355,25 @@ function StepPreparedness({ data, onChange }) {
 function P1Review({ state }) {
   const { profile:p, functions:fns, preparedness:pr } = state;
   const gaps = [pr.hasExistingPlan==='no', pr.hasBackupPower==='no', pr.remoteWork==='no', pr.hasOffsiteBackup==='no'].filter(Boolean).length;
-  const bl = v => v==='yes'||v==='yes-all'?'✅ Yes':v==='partial'?'⚠️ Partially':v==='no'?'❌ No':'—';
-  const Row = ({ l, v }) => !v ? null : <div className="flex gap-3 py-2 border-b border-gray-50 last:border-0 text-sm"><dt className="text-gray-400 w-44 flex-shrink-0">{l}</dt><dd className="text-navy font-medium">{v}</dd></div>;
+  const bl = v => v==='yes'?'Yes':v==='yes-all'?'Yes, all employees':v==='partial'?'Partially':v==='no'?'No':'Not answered';
+  const Row = ({ l, v }) => !v ? null : <div><dt>{l}</dt><dd>{v}</dd></div>;
   return (
-    <div className="space-y-5">
-      <div><h2 className="text-xl font-bold text-navy">Phase 1 Review</h2><p className="text-gray-500 text-sm mt-1">Confirm your intake data, then continue to the Risk Assessment.</p></div>
-      <div className="card p-5"><h3 className="font-bold text-xs uppercase tracking-widest text-gray-400 mb-3">🏢 Company Profile</h3><dl><Row l="Company" v={p.companyName}/><Row l="Industry" v={p.industry}/><Row l="Address" v={p.address}/><Row l="Employees" v={p.employees}/><Row l="Locations" v={p.locations}/></dl></div>
-      <div className="card p-5"><h3 className="font-bold text-xs uppercase tracking-widest text-gray-400 mb-3">⚙️ Critical Functions</h3><div className="space-y-2">{fns.map((fn,i) => <div key={fn.id} className="bg-gray-50 rounded-lg p-3 text-sm"><div className="font-semibold text-navy">{i+1}. {fn.name}</div>{fn.reason&&<div className="text-gray-500 mt-0.5">Why: {fn.reason}</div>}{fn.downtime&&<div className="text-gray-500">Max downtime: {fn.downtime}</div>}</div>)}</div></div>
-      <div className="card p-5"><h3 className="font-bold text-xs uppercase tracking-widest text-gray-400 mb-3">🛡️ Preparedness</h3><dl><Row l="Existing plan" v={bl(pr.hasExistingPlan)}/><Row l="Backup power" v={bl(pr.hasBackupPower)}/><Row l="Remote work" v={bl(pr.remoteWork)}/><Row l="Offsite backup" v={bl(pr.hasOffsiteBackup)}/></dl></div>
-      {gaps > 0 && <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800"><strong>⚠️ {gaps} preparedness gap{gaps>1?'s':''} identified.</strong> These become priority action items in your plan.</div>}
+    <div>
+      <StepHead phase="Client intake" title="Intake review">Confirm the intake details, then continue to the risk assessment.</StepHead>
+      <div className="stack">
+        <section className="sheet pad"><h2 className="section-title">Company profile</h2><dl className="dl"><Row l="Company" v={p.companyName}/><Row l="Industry" v={p.industry}/><Row l="Address" v={p.address}/><Row l="Employees" v={p.employees}/><Row l="Locations" v={p.locations}/></dl></section>
+        <section className="sheet pad"><h2 className="section-title">Critical functions</h2>
+          <ol className="outlist">{fns.map((fn,i) => <li key={fn.id}><span className="k">{i+1}</span><span><b className="font-medium">{fn.name || 'Unnamed function'}</b>{(fn.reason||fn.downtime) && <span className="help" style={{display:'block'}}>{[fn.reason, fn.downtime && `Max downtime ${fn.downtime}`].filter(Boolean).join('. ')}</span>}</span><span/></li>)}</ol>
+        </section>
+        <section className="sheet pad"><h2 className="section-title">Preparedness</h2><dl className="dl"><Row l="Existing plan" v={bl(pr.hasExistingPlan)}/><Row l="Backup power" v={bl(pr.hasBackupPower)}/><Row l="Remote work" v={bl(pr.remoteWork)}/><Row l="Offsite backup" v={bl(pr.hasOffsiteBackup)}/></dl></section>
+        {gaps > 0 && <Alert tone="warn" title={`${gaps} preparedness gap${gaps>1?'s':''} identified`}>These become priority action items in the plan.</Alert>}
+      </div>
     </div>
   );
 }
 
 // ── PHASE 2 ──────────────────────────────────────────────────────────────────
-function StepHazards({ selected, onChange, custom, onCustom }) {
+function StepHazards({ selected, onChange, custom, onCustom, error }) {
   const [inp, setInp] = useState('');
   const toggle = id => onChange(selected.includes(id) ? selected.filter(x => x!==id) : [...selected, id]);
   function addCustom() {
@@ -345,46 +383,42 @@ function StepHazards({ selected, onChange, custom, onCustom }) {
     onChange([...selected, id]);
     setInp('');
   }
-  const all = [...HAZARD_LIST, ...custom];
+  const HzCheck = ({ h }) => {
+    const on = selected.includes(h.id);
+    return (
+      <Checkbox checked={on} onChange={() => toggle(h.id)}>
+        <span className="ttl"><Icon name={hazardIcon(h.id)} className="hz-ic"/>{h.name}{h.custom && <span className="tag plain">Custom</span>}</span>
+      </Checkbox>
+    );
+  };
   return (
-    <div className="space-y-5">
-      <div><h2 className="text-xl font-bold text-navy">Select Hazards to Assess</h2><p className="text-gray-500 text-sm mt-1">Choose every hazard that could realistically affect your organization.</p></div>
-      {selected.length > 0 && <div className="bg-brand-light border border-brand/20 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-brand font-semibold"><span>✓</span>{selected.length} hazard{selected.length!==1?'s':''} selected</div>}
-      {CATS.map(cat => {
-        const hazards = all.filter(h => h.cat === cat); if(!hazards.length) return null;
-        return (
-          <div key={cat}>
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{cat}</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {hazards.map(h => {
-                const on = selected.includes(h.id);
-                return (
-                  <button key={h.id} onClick={() => toggle(h.id)} className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?'border-brand bg-brand-light':'border-gray-200 bg-white hover:border-gray-300'}`}>
-                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${on?'bg-brand border-brand':'border-gray-300'}`}>{on&&<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}</div>
-                    <span className="text-base">{h.icon}</span>
-                    <span className={`text-sm font-semibold ${on?'text-brand':'text-navy'}`}>{h.name}</span>
-                    {h.custom && <span className="ml-auto text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Custom</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-      {custom.length > 0 && (
-        <div>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Custom</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {custom.map(h => {
-              const on = selected.includes(h.id);
-              return <button key={h.id} onClick={() => toggle(h.id)} className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${on?'border-brand bg-brand-light':'border-gray-200 bg-white hover:border-gray-300'}`}><div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${on?'bg-brand border-brand':'border-gray-300'}`}>{on&&<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}</div><span>⚠️</span><span className={`text-sm font-semibold ${on?'text-brand':'text-navy'}`}>{h.name}</span></button>;
-            })}
+    <div>
+      <StepHead phase="Risk assessment" title="Select hazards to assess">Choose every hazard that could realistically affect the organization.</StepHead>
+      <div className="stack">
+        <p className="help" aria-live="polite"><b className="num" style={{color:'var(--color-text)'}}>{selected.length}</b> hazard{selected.length!==1?'s':''} selected</p>
+        {CATS.map(cat => {
+          const hazards = HAZARD_LIST.filter(h => h.cat === cat); if(!hazards.length) return null;
+          return (
+            <fieldset key={cat} style={{border:0,margin:0,padding:0}}>
+              <legend className="group-label">{cat}</legend>
+              <div className="hz-list">{hazards.map(h => <HzCheck key={h.id} h={h}/>)}</div>
+            </fieldset>
+          );
+        })}
+        {custom.length > 0 && (
+          <fieldset style={{border:0,margin:0,padding:0}}>
+            <legend className="group-label">Custom</legend>
+            <div className="hz-list">{custom.map(h => <HzCheck key={h.id} h={h}/>)}</div>
+          </fieldset>
+        )}
+        <div className="field">
+          <label className="label" htmlFor="custom-hz">Add a custom hazard <span className="opt">(optional)</span></label>
+          <div className="flex gap-2">
+            <input id="custom-hz" className="input flex-1" style={{minWidth:0}} value={inp} onChange={e=>setInp(e.target.value)} placeholder="Chemical spill, hailstorm, sabotage" onKeyDown={e=>e.key==='Enter'&&addCustom()}/>
+            <button type="button" onClick={addCustom} disabled={!inp.trim()} className="btn btn-secondary"><Icon name="plus"/>Add</button>
           </div>
         </div>
-      )}
-      <div>
-        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Custom Hazard</div>
-        <div className="flex gap-2"><input className="input flex-1" value={inp} onChange={e=>setInp(e.target.value)} placeholder="e.g. Chemical spill, Terrorism, Sabotage…" onKeyDown={e=>e.key==='Enter'&&addCustom()}/><button onClick={addCustom} disabled={!inp.trim()} className="btn-primary whitespace-nowrap" style={{padding:'10px 18px'}}>+ Add</button></div>
+        {error && <p className="errmsg"><Icon name="circle-alert" size={16}/>{error}</p>}
       </div>
     </div>
   );
@@ -393,6 +427,7 @@ function StepHazards({ selected, onChange, custom, onCustom }) {
 function RiskMatrix({ risks, onChange, allHazards }) {
   const [activeId, setActiveId] = useState(null);
   const [printPreview, setPrintPreview] = useState(false);
+  const [tip, setTip] = useState('');
   useEffect(() => {
     const first = allHazards.find(h => !risks.find(r => r.id===h.id));
     setActiveId(first ? first.id : allHazards[0]?.id ?? null);
@@ -412,133 +447,121 @@ function RiskMatrix({ risks, onChange, allHazards }) {
   const placed = new Set(risks.map(r => r.id));
   const sorted = [...risks].sort((a,b) => score(b)-score(a));
   const activeHazard = allHazards.find(h => h.id===activeId);
+  const unrated = allHazards.length - allHazards.filter(h => placed.has(h.id)).length;
+  const cellSentence = (l, i, names) => `Likelihood ${l} (${L_LABELS[l-1]}) by impact ${i} (${I_LABELS[i-1]}) = ${l*i}, ${levelOf(l*i).label}${names.length ? '. ' + names.join(', ') : ''}`;
 
   return (
-    <div className="space-y-6">
-      <div><h2 className="text-xl font-bold text-navy">Risk Assessment Matrix</h2><p className="text-gray-500 text-sm mt-1">Select a hazard below, then click a cell to assign its <strong>Likelihood × Impact</strong> rating.</p></div>
-
-      {/* Hazard pills */}
-      <div>
-        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Hazards — click to select, then click a matrix cell</div>
-        <div className="flex flex-wrap gap-2">
-          {allHazards.map(h => {
-            const r = risks.find(x => x.id===h.id); const isActive = h.id===activeId; const isPlaced = placed.has(h.id);
-            return (
-              <button key={h.id} onClick={() => setActiveId(h.id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${isActive?'border-brand bg-brand text-white shadow-md shadow-brand/30':isPlaced?'border-green-400 bg-green-50 text-green-700':'border-gray-200 bg-white text-gray-600 hover:border-brand/40'}`}>
-                {!isPlaced&&!isActive&&<span className="w-1.5 h-1.5 rounded-full bg-gray-300 pulse"/>}
-                {isPlaced&&!isActive&&<span className="text-green-500 text-xs">✓</span>}
-                <span>{h.icon}</span><span>{h.name}</span>
-                {isPlaced&&r&&<span className={`text-[10px] font-bold ml-0.5 ${isActive?'text-white/80':'text-green-600'}`}>{r.likelihood}×{r.impact}</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {activeHazard && (
-        <div className="flex items-center gap-2 bg-navy text-white rounded-xl px-4 py-3 text-sm font-semibold">
-          <span className="text-base">{activeHazard.icon}</span>
-          <span>Placing: <strong>{activeHazard.name}</strong></span>
-          <span className="ml-auto text-white/50 text-xs">Click a cell →</span>
-        </div>
-      )}
-
-      {/* 5×5 Matrix */}
-      <div className="card p-4 overflow-x-auto">
-        <div className="min-w-[400px]">
-          <div className="flex gap-2 items-stretch">
-            <div className="flex items-center justify-center w-5 flex-shrink-0">
-              <span className="text-[10px] font-bold text-gray-400 tracking-widest uppercase" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>IMPACT ↑</span>
-            </div>
-            <div className="flex-1 flex flex-col gap-1.5">
-              {[5,4,3,2,1].map(impact => (
-                <div key={impact} className="flex gap-1.5 items-stretch">
-                  <div className="w-20 flex-shrink-0 flex items-center justify-end pr-2 text-right">
-                    <div><div className="text-xs font-bold text-gray-500">{impact}</div><div className="text-[9px] text-gray-400 leading-tight">{I_LABELS[impact-1]}</div></div>
-                  </div>
-                  {[1,2,3,4,5].map(likelihood => {
-                    const bg = cellColor(likelihood, impact);
-                    const cellRisks = risks.filter(r => r.likelihood===likelihood && r.impact===impact);
-                    return (
-                      <button key={likelihood} onClick={() => placeRisk(likelihood, impact)}
-                        className="flex-1 relative rounded-lg transition-all duration-150 group"
-                        style={{background:bg, minHeight:60, border:`2px solid ${bg}`}}
-                        onMouseEnter={e=>{if(activeId)e.currentTarget.style.opacity='0.75';}}
-                        onMouseLeave={e=>{e.currentTarget.style.opacity='1';}}
-                        title={`L${likelihood} × I${impact} = ${likelihood*impact}`}
-                      >
-                        <span className="absolute top-1 right-1.5 text-[10px] font-bold text-white/70">{likelihood*impact}</span>
-                        <div className="p-1 pt-4 flex flex-wrap gap-0.5 justify-center">
-                          {cellRisks.map(r => (
-                            <div key={r.id} onClick={e=>{e.stopPropagation();setActiveId(r.id);}} className={`text-[9px] bg-white/25 hover:bg-white/40 rounded px-1 py-0.5 font-semibold text-white cursor-pointer truncate transition-all ${activeId===r.id?'ring-1 ring-white':''}`} style={{maxWidth:52}}>{r.icon} {r.name}</div>
-                          ))}
-                        </div>
-                        {activeId && cellRisks.length===0 && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><span className="text-white/80 text-xl">+</span></div>}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-              <div className="flex gap-1.5 mt-1">
-                <div className="w-20 flex-shrink-0"/>
-                {[1,2,3,4,5].map(l => <div key={l} className="flex-1 text-center"><div className="text-xs font-bold text-gray-500">{l}</div><div className="text-[9px] text-gray-400 leading-tight">{L_LABELS[l-1]}</div></div>)}
-              </div>
-              <div className="flex gap-1.5"><div className="w-20 flex-shrink-0"/><div className="flex-1 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">LIKELIHOOD →</div></div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-4 mt-3 pt-3 border-t border-gray-100">
-            {[{l:'Low (1–4)',c:'#22C55E'},{l:'Medium (5–9)',c:'#EAB308'},{l:'High (10–14)',c:'#F97316'},{l:'Critical (15–25)',c:'#EF4444'}].map(({l,c}) => <div key={l} className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{background:c}}/><span className="text-xs text-gray-500">{l}</span></div>)}
-          </div>
-        </div>
-      </div>
-
-      {/* Risk register */}
-      {sorted.length > 0 && (
-        <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <span className="font-bold text-navy">Risk Register</span>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400">{sorted.length} hazard{sorted.length!==1?'s':''} · sorted by priority</span>
-              <button onClick={() => setPrintPreview(true)} className="text-xs text-brand font-semibold hover:underline">🖨️ Print Preview</button>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 border-b border-gray-100">{['#','Hazard','Likelihood','Impact','Score','Priority',''].map((h,i) => <th key={i} className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>)}</tr></thead>
-              <tbody>
-                {sorted.map((r, i) => {
-                  const s = score(r); const lv = levelOf(s);
-                  return (
-                    <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-gray-300 font-bold">{i+1}</td>
-                      <td className="px-4 py-3"><div className="flex items-center gap-2"><span>{r.icon}</span><span className="font-semibold text-navy">{r.name}</span></div></td>
-                      <td className="px-4 py-3 text-center"><span className="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-600">{r.likelihood}</span><div className="text-[10px] text-gray-400 mt-0.5">{L_LABELS[r.likelihood-1]}</div></td>
-                      <td className="px-4 py-3 text-center"><span className="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-600">{r.impact}</span><div className="text-[10px] text-gray-400 mt-0.5">{I_LABELS[r.impact-1]}</div></td>
-                      <td className="px-4 py-3 text-center"><span className="inline-flex w-10 h-8 items-center justify-center rounded-lg font-black text-white text-sm" style={{background:cellColor(r.likelihood,r.impact)}}>{s}</span></td>
-                      <td className="px-4 py-3"><span className="inline-flex px-2.5 py-1 rounded-full text-xs font-bold border" style={{background:lv.bg,color:lv.text,borderColor:lv.border}}>{lv.label}</span></td>
-                      <td className="px-4 py-3"><button onClick={() => { setActiveId(r.id); onChange(risks.filter(x => x.id!==r.id)); }} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2">
-            {[{l:'Critical',min:15},{l:'High',min:10},{l:'Medium',min:5},{l:'Low',min:0}].map(({l,min}) => {
-              const n = sorted.filter(r => {const s=score(r); return l==='Critical'?s>=15:l==='High'?s>=10&&s<15:l==='Medium'?s>=5&&s<10:s<5;}).length;
-              if(!n) return null;
-              const lv = levelOf(l==='Critical'?15:l==='High'?10:l==='Medium'?5:1);
-              return <span key={l} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border" style={{background:lv.bg,color:lv.text,borderColor:'transparent'}}><span className="font-black text-base leading-none">{n}</span>{l}</span>;
+    <div>
+      <StepHead phase="Risk assessment" title="Risk matrix">Pick a hazard, then pick the cell that matches its likelihood and impact. The score is likelihood times impact.</StepHead>
+      <div className="stack">
+        <fieldset style={{border:0,margin:0,padding:0}}>
+          <legend className="group-label">Hazards ({allHazards.length - unrated} of {allHazards.length} rated)</legend>
+          <div className="hz-list">
+            {allHazards.map(h => {
+              const r = risks.find(x => x.id===h.id); const isActive = h.id===activeId;
+              return (
+                <button type="button" key={h.id} onClick={() => setActiveId(h.id)} className="hz-btn" aria-pressed={isActive}>
+                  <Icon name={hazardIcon(h.id)} className="hz-ic"/>
+                  <span className="nm">{h.name}<small>{r ? `Likelihood ${r.likelihood}, impact ${r.impact}` : 'Not rated yet'}</small></span>
+                  {r ? <span className="flex items-center gap-2"><span className="num">{score(r)}</span><RiskBadge s={score(r)}/></span> : <span className="badge b-none">Not rated</span>}
+                </button>
+              );
             })}
           </div>
+        </fieldset>
+
+        {activeHazard && (
+          <div className="placing" aria-live="polite">
+            <Icon name={hazardIcon(activeHazard.id)}/>
+            <span>Rating <b>{activeHazard.name}</b></span>
+            <span className="hint hidden sm:inline">Choose a cell below</span>
+          </div>
+        )}
+
+        {/* 5×5 heat map: rows = impact 5→1, columns = likelihood 1→5 */}
+        <div className="sheet pad">
+          <div className="heat" role="grid" aria-label="Risk matrix: impact by likelihood">
+            <div className="yl" aria-hidden="true">Impact</div>
+            {[5,4,3,2,1].map((impact, ri) => (
+              <React.Fragment key={impact}>
+                <div className="ax" style={{gridColumn:2, gridRow:ri+1}} aria-hidden="true"><span>{impact}<small>{I_LABELS[impact-1]}</small></span></div>
+                {[1,2,3,4,5].map(likelihood => {
+                  const s = likelihood*impact; const lv = levelOf(s);
+                  const cellRisks = risks.filter(r => r.likelihood===likelihood && r.impact===impact);
+                  const sentence = cellSentence(likelihood, impact, cellRisks.map(r => r.name));
+                  return (
+                    <button type="button" key={likelihood} className={`c ${lv.cls}`} style={{gridColumn:likelihood+2, gridRow:ri+1}}
+                      onClick={() => placeRisk(likelihood, impact)} aria-label={activeHazard ? `Rate ${activeHazard.name}: ${sentence}` : sentence}
+                      onMouseEnter={() => setTip(sentence)} onFocus={() => setTip(sentence)}>
+                      <span className="sc">{s}</span>
+                      <span className="chips">{cellRisks.map(r => <span key={r.id} className={`chip-hz ${activeId===r.id?'act':''}`} onClick={e=>{e.stopPropagation();setActiveId(r.id);}} title={r.name}>{r.name}</span>)}</span>
+                      <span className="dots" aria-hidden="true">{cellRisks.map(r => <i key={r.id} className={activeId===r.id?'act':''}/>)}</span>
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+            {[1,2,3,4,5].map(l => <div key={l} className="ax" style={{gridColumn:l+2, gridRow:6}} aria-hidden="true"><span>{l}<small>{L_LABELS[l-1]}</small></span></div>)}
+            <div className="xl" style={{gridRow:7}} aria-hidden="true">Likelihood</div>
+          </div>
+          <p className="heat-tip" aria-live="polite">{tip || 'Tap, hover or focus a cell to see its score.'}</p>
+          <div className="legend row4 mt-3 pt-3" style={{borderTop:'1px solid var(--color-border)'}}>
+            {[['Low','1 to 5',1],['Moderate','6 to 9',6],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
+          </div>
         </div>
-      )}
-      {allHazards.length > placed.size && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
-          <strong>{allHazards.length - placed.size} hazard{allHazards.length-placed.size>1?'s':''} not yet rated.</strong> Click each pill above, then click a matrix cell to assign its rating.
-        </div>
-      )}
-      {printPreview && <PrintPreviewModal risks={risks} onClose={() => setPrintPreview(false)}/>}
+
+        {/* Risk register */}
+        {sorted.length > 0 && (
+          <section className="sheet">
+            <div className="reg-head">
+              <h2 className="section-title" style={{margin:0}}>Risk register</h2>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="help">{sorted.length} hazard{sorted.length!==1?'s':''}, highest score first</span>
+                <button type="button" onClick={() => setPrintPreview(true)} className="btn btn-ghost btn-sm"><Icon name="printer" size={16}/>Print preview</button>
+              </div>
+            </div>
+            <div className="reg-table">
+              <table className="tbl">
+                <thead><tr><th>#</th><th>Hazard</th><th>Likelihood</th><th>Impact</th><th>Score</th><th>Risk band</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                  {sorted.map((r, i) => (
+                    <tr key={r.id}>
+                      <td className="num muted">{i+1}</td>
+                      <td><span className="flex items-center gap-2 font-medium"><Icon name={hazardIcon(r.id)} size={16} className="hz-ic"/>{r.name}</span></td>
+                      <td><span className="num">{r.likelihood}</span><span className="sub">{L_LABELS[r.likelihood-1]}</span></td>
+                      <td><span className="num">{r.impact}</span><span className="sub">{I_LABELS[r.impact-1]}</span></td>
+                      <td className="score">{score(r)}</td>
+                      <td><RiskBadge s={score(r)}/></td>
+                      <td><button type="button" onClick={() => { setActiveId(r.id); onChange(risks.filter(x => x.id!==r.id)); }} className="btn btn-ghost btn-icon danger" aria-label={`Clear rating for ${r.name}`}><Icon name="x"/></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ol className="rank reg-list">
+              {sorted.map((r, i) => (
+                <li key={r.id}>
+                  <span className="rn">{i+1}</span>
+                  <span className="nm">{r.name}<small>Likelihood {r.likelihood} ({L_LABELS[r.likelihood-1]}), impact {r.impact} ({I_LABELS[r.impact-1]})</small></span>
+                  <button type="button" onClick={() => { setActiveId(r.id); onChange(risks.filter(x => x.id!==r.id)); }} className="btn btn-ghost btn-icon danger" aria-label={`Clear rating for ${r.name}`}><Icon name="x"/></button>
+                  <span className="rs"><span className="sc">{score(r)}</span><RiskBadge s={score(r)}/></span>
+                </li>
+              ))}
+            </ol>
+            <div className="reg-foot">
+              {[{l:'Critical',min:15},{l:'High',min:10},{l:'Moderate',min:6},{l:'Low',min:0}].map(({l}) => {
+                const n = sorted.filter(r => {const s=score(r); return l==='Critical'?s>=15:l==='High'?s>=10&&s<15:l==='Moderate'?s>=6&&s<10:s<6;}).length;
+                if(!n) return null;
+                return <span key={l} className="flex items-center gap-2"><span className="num" style={{color:'var(--color-text)',fontSize:'var(--text-md)'}}>{n}</span>{l}</span>;
+              })}
+            </div>
+          </section>
+        )}
+        {unrated > 0 && (
+          <Alert tone="info" title={`${unrated} hazard${unrated>1?'s':''} not rated yet`}>Pick each hazard above, then choose a matrix cell to rate it.</Alert>
+        )}
+        {printPreview && <PrintPreviewModal risks={risks} onClose={() => setPrintPreview(false)}/>}
+      </div>
     </div>
   );
 }
@@ -546,57 +569,45 @@ function RiskMatrix({ risks, onChange, allHazards }) {
 // ── Print Preview Modal ───────────────────────────────────────────────────────
 function PrintPreviewModal({ risks, onClose }) {
   const sorted = [...risks].sort((a,b) => score(b)-score(a));
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); const k = e => e.key==='Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex flex-col">
-      <div className="bg-navy text-white px-6 py-3 flex items-center justify-between print-hidden">
-        <span className="font-bold text-sm">Print Preview — Risk Register</span>
-        <div className="flex gap-3">
-          <button onClick={() => window.print()} className="btn-primary" style={{padding:'8px 20px',fontSize:'14px'}}>🖨️ Print</button>
-          <button onClick={onClose} className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 px-4 py-2 rounded-lg font-semibold transition-all">Close</button>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{background:'var(--color-bg)'}} role="dialog" aria-modal="true" aria-label="Risk register print preview">
+      <div className="topbar print-hidden">
+        <b className="font-display" style={{color:'var(--color-text-heading)'}}>Print preview</b>
+        <div className="ml-auto flex gap-2">
+          <button ref={ref} type="button" onClick={() => window.print()} className="btn btn-primary"><Icon name="printer"/>Print</button>
+          <button type="button" onClick={onClose} className="btn btn-ghost"><Icon name="x"/>Close</button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto bg-white" id="print-area">
-        <div className="p-8 max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-xl font-bold" style={{color:'#1A2238'}}>Risk Register</h2>
-            <span className="text-xs text-gray-400">World Aware — Disaster Plan Builder</span>
+      <div className="flex-1 overflow-auto" id="print-area">
+        <div className="print-sheet sheet pad" style={{maxWidth:900, margin:'24px auto'}}>
+          <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+            <h2 style={{fontSize:'var(--text-xl)'}}>Risk register</h2>
+            <img src="assets/wa-lockup-full-color.png" alt="World Aware, Emergency Planning" style={{height:30,width:'auto'}}/>
           </div>
-          <p className="text-sm text-gray-400 mb-6">{sorted.length} hazard{sorted.length!==1?'s':''} assessed · sorted by priority score</p>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
-            <thead>
-              <tr style={{background:'#1A2238',color:'white'}}>
-                {['#','Hazard','Likelihood','Impact','Score','Priority'].map(h => (
-                  <th key={h} style={{padding:'10px 12px',textAlign:'left',fontSize:'11px',fontWeight:'bold',textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
+          <p className="help mb-5">{sorted.length} hazard{sorted.length!==1?'s':''} assessed, highest score first</p>
+          <div style={{overflowX:'auto'}}>
+          <table className="tbl">
+            <thead><tr>{['#','Hazard','Likelihood','Impact','Score','Risk band'].map(h => <th key={h}>{h}</th>)}</tr></thead>
             <tbody>
-              {sorted.map((r,i) => {
-                const s = score(r); const lv = levelOf(s);
-                return (
-                  <tr key={r.id} style={{background:i%2===0?'#F8FAFC':'white',borderBottom:'1px solid #E5E7EB'}}>
-                    <td style={{padding:'10px 12px',color:'#9CA3AF',fontWeight:'bold'}}>{i+1}</td>
-                    <td style={{padding:'10px 12px',fontWeight:'600',color:'#1A2238'}}>{r.icon} {r.name}</td>
-                    <td style={{padding:'10px 12px',color:'#334155'}}>{r.likelihood} — {L_LABELS[r.likelihood-1]}</td>
-                    <td style={{padding:'10px 12px',color:'#334155'}}>{r.impact} — {I_LABELS[r.impact-1]}</td>
-                    <td style={{padding:'10px 12px',fontWeight:'900',textAlign:'center',color:'#1A2238',fontSize:'15px'}}>{s}</td>
-                    <td style={{padding:'10px 12px'}}>
-                      <span style={{padding:'3px 10px',borderRadius:'999px',fontSize:'11px',fontWeight:'bold',background:lv.bg,color:lv.text}}>{lv.label}</span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {sorted.map((r,i) => (
+                <tr key={r.id} style={{background:i%2?'var(--color-surface-sunk)':'#fff'}}>
+                  <td className="num muted">{i+1}</td>
+                  <td className="font-medium">{r.name}</td>
+                  <td>{r.likelihood}, {L_LABELS[r.likelihood-1]}</td>
+                  <td>{r.impact}, {I_LABELS[r.impact-1]}</td>
+                  <td className="score">{score(r)}</td>
+                  <td><RiskBadge s={score(r)}/></td>
+                </tr>
+              ))}
             </tbody>
           </table>
-          <div style={{marginTop:'24px',display:'flex',gap:'16px',flexWrap:'wrap'}}>
-            {[{l:'Low (1–4)',c:'#22C55E'},{l:'Medium (5–9)',c:'#EAB308'},{l:'High (10–14)',c:'#F97316'},{l:'Critical (15–25)',c:'#EF4444'}].map(({l,c}) => (
-              <div key={l} style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'11px',color:'#6B7280'}}>
-                <div style={{width:10,height:10,borderRadius:2,background:c}}/>
-                {l}
-              </div>
-            ))}
           </div>
-          <p style={{marginTop:'16px',fontSize:'11px',color:'#CBD5E1'}}>Generated by World Aware Disaster Plan Builder · beworldaware.com</p>
+          <div className="legend row4 mt-5">
+            {[['Low','1 to 5',1],['Moderate','6 to 9',6],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
+          </div>
+          <p className="help mt-5">World Aware Emergency Planning, <b style={{color:'var(--color-text-heading)'}}>beworldaware.com</b></p>
         </div>
       </div>
     </div>
@@ -604,187 +615,221 @@ function PrintPreviewModal({ risks, onClose }) {
 }
 
 // ── PHASE 4: DOCUMENT GENERATION ────────────────────────────────────────────
-const {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  WidthType, AlignmentType, ShadingType, BorderStyle, HeadingLevel,
-  PageNumber, Footer, Header, TabStopType, TabStopLeader,
-  convertInchesToTwip, UnderlineType,
-} = window.docx || {};
+// World Aware Word theme (see wa-design/word-document-styles.md and word/wa-docx-theme.js).
+// Calibri everywhere; brand carried by the logo image, maroon headings, amber rules,
+// cream callouts and the risk ramp. Enum lookups happen at generation time so the
+// app still loads if the docx script is blocked.
+const DX = () => window.docx || {};
 
-const NAVY_HEX  = '1A2238';
-const BRAND_HEX = 'FF6B35';
-const GRAY_HEX  = '64748B';
-const RED_HEX   = 'DC2626';
-
-const NO_BORDER = {
-  top:    { style: BorderStyle.NONE, size: 0, color: 'auto' },
-  bottom: { style: BorderStyle.NONE, size: 0, color: 'auto' },
-  left:   { style: BorderStyle.NONE, size: 0, color: 'auto' },
-  right:  { style: BorderStyle.NONE, size: 0, color: 'auto' },
+const WA = {
+  maroon:'4D0000', maroon6:'89221A', amber:'B97A14', amber6:'956211', amber7:'774F12', amber1:'FFE7C7',
+  forest:'2F4A3C', cream:'F7EDD8', offwhite:'F9F4F4', ink:'201913', muted:'665B54', subtle:'837870',
+  rule:'E4DCD6', band:'FAF6F3', white:'FFFFFF', danger:'A12623', dangerBg:'FFEFEC',
 };
-const TABLE_BORDERS = {
-  top:               { style: BorderStyle.SINGLE, size: 6, color: NAVY_HEX },
-  bottom:            { style: BorderStyle.SINGLE, size: 6, color: NAVY_HEX },
-  left:              { style: BorderStyle.NONE, size: 0 },
-  right:             { style: BorderStyle.NONE, size: 0 },
-  insideHorizontal:  { style: BorderStyle.SINGLE, size: 2, color: 'E2E8F0' },
-  insideVertical:    { style: BorderStyle.NONE, size: 0 },
+// Same thresholds as the app (Moderate from 6). Fills are the brand risk ramp; the word is always printed.
+const WA_RISK = {
+  Low:      { fill:'FDCE95', ink:'201913' },
+  Moderate: { fill:'B97A14', ink:'201913' },
+  High:     { fill:'9B3700', ink:'FFFFFF' },
+  Critical: { fill:'631100', ink:'FFFFFF' },
 };
+const WA_PAGE = { size:{ width:12240, height:15840 }, margin:{ top:1440, bottom:1296, left:1440, right:1440, header:576, footer:576, gutter:0 } };
+const CW = 9360; // content width, DXA
 
-// ── Doc primitives ────────────────────────────────────────────────────────────
-function dp(text, opts = {}) {
-  return new Paragraph({ children: [new TextRun({ text: text ?? '', size: 22, color: '334155', ...opts })], spacing: { before: 80, after: 80 } });
-}
-function dh1(text) {
-  return new Paragraph({
-    children: [new TextRun({ text, bold: true, size: 36, color: NAVY_HEX })],
-    spacing: { before: 480, after: 200 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: BRAND_HEX } },
-  });
-}
-function dh2(text) {
-  return new Paragraph({
-    children: [new TextRun({ text, bold: true, size: 26, color: NAVY_HEX })],
-    spacing: { before: 320, after: 140 },
-  });
-}
-function dh3(text) {
-  return new Paragraph({
-    children: [new TextRun({ text, bold: true, size: 22, color: BRAND_HEX })],
-    spacing: { before: 200, after: 80 },
-  });
-}
-function dbullet(text, indent = 360) {
-  return new Paragraph({
-    children: [new TextRun({ text: `\u2022  ${text}`, size: 22, color: '334155' })],
-    spacing: { before: 60, after: 60 },
-    indent: { left: indent },
-  });
-}
-function dnote(text) {
-  return new Paragraph({
-    children: [new TextRun({ text, size: 20, color: '94A3B8', italics: true })],
-    spacing: { before: 60, after: 60 },
-  });
-}
-function dspacer(before = 160, after = 160) {
-  return new Paragraph({ children: [new TextRun({ text: '' })], spacing: { before, after } });
-}
-function dpb() {
-  return new Paragraph({ pageBreakBefore: true, children: [new TextRun({ text: '' })] });
-}
-function dph(label) {
-  // Orange bracketed placeholder
-  return new TextRun({ text: `[${label}]`, bold: true, color: BRAND_HEX, size: 22 });
-}
-function dkv(label, value) {
-  return new Paragraph({
-    children: [
-      new TextRun({ text: `${label}:  `, bold: true, size: 22, color: NAVY_HEX }),
-      value
-        ? new TextRun({ text: value, size: 22, color: '334155' })
-        : new TextRun({ text: '[NOT PROVIDED]', size: 22, color: BRAND_HEX, italics: true }),
+function waStyles() {
+  const { BorderStyle, LineRuleType } = DX();
+  const AUTO = LineRuleType.AUTO;
+  return {
+    default: {
+      document: { run:{ font:'Calibri', size:22, color:WA.ink }, paragraph:{ spacing:{ after:120, line:288, lineRule:AUTO } } },
+      title:    { run:{ font:'Calibri', size:64, bold:true, color:WA.maroon }, paragraph:{ spacing:{ before:0, after:120, line:240, lineRule:AUTO } } },
+      heading1: { run:{ font:'Calibri', size:40, bold:true, color:WA.maroon }, paragraph:{ spacing:{ before:0, after:240, line:240, lineRule:AUTO }, border:{ bottom:{ style:BorderStyle.SINGLE, size:12, color:WA.amber, space:6 } }, keepNext:true, keepLines:true } },
+      heading2: { run:{ font:'Calibri', size:28, bold:true, color:WA.maroon }, paragraph:{ spacing:{ before:360, after:120, line:240, lineRule:AUTO }, keepNext:true, keepLines:true } },
+      heading3: { run:{ font:'Calibri', size:23, bold:true, color:WA.ink }, paragraph:{ spacing:{ before:240, after:80, line:240, lineRule:AUTO }, keepNext:true } },
+      listParagraph: { run:{ font:'Calibri', size:22, color:WA.ink }, paragraph:{ spacing:{ after:60 } } },
+      hyperlink: { run:{ color:WA.maroon6, underline:{} } },
+    },
+    paragraphStyles: [
+      { id:'WALead', name:'WA Lead', basedOn:'Normal', next:'Normal', quickFormat:true, run:{ size:26, color:WA.muted }, paragraph:{ spacing:{ after:240, line:300, lineRule:AUTO } } },
+      { id:'WAEyebrow', name:'WA Section Number', basedOn:'Normal', next:'Heading1', quickFormat:true, run:{ size:20, bold:true, color:WA.amber6 }, paragraph:{ spacing:{ before:0, after:40 }, keepNext:true } },
+      { id:'WASmall', name:'WA Small', basedOn:'Normal', next:'Normal', quickFormat:true, run:{ size:18, color:WA.muted }, paragraph:{ spacing:{ before:60, after:80 } } },
+      { id:'WATableHead', name:'WA Table Head', basedOn:'Normal', quickFormat:true, run:{ size:18, bold:true, color:WA.cream }, paragraph:{ spacing:{ before:0, after:0 } } },
+      { id:'WATableText', name:'WA Table Text', basedOn:'Normal', quickFormat:true, run:{ size:20, color:WA.ink }, paragraph:{ spacing:{ before:0, after:0, line:264, lineRule:AUTO } } },
+      { id:'WACalloutLabel', name:'WA Callout Label', basedOn:'Normal', quickFormat:true, run:{ size:18, bold:true, color:WA.maroon }, paragraph:{ spacing:{ before:0, after:40 } } },
+      { id:'WAHeaderFooter', name:'WA Header Footer', basedOn:'Normal', quickFormat:true, run:{ size:16, color:WA.subtle }, paragraph:{ spacing:{ before:0, after:0 } } },
     ],
-    spacing: { before: 80, after: 80 },
-  });
+    // Fields the consultant completes in Word. Italic amber-700 on a pale amber wash so they
+    // stand out on white, banded rows and cream callouts. Select the text and type over it.
+    characterStyles: [
+      { id:'WAPlaceholder', name:'WA Placeholder', basedOn:'DefaultParagraphFont', quickFormat:true,
+        run:{ italics:true, color:WA.amber7, shading:{ type:DX().ShadingType.CLEAR, color:'auto', fill:WA.amber1 } } },
+    ],
+  };
 }
+function waNumbering() {
+  const { LevelFormat, AlignmentType } = DX();
+  return { config: [
+    { reference:'wa-steps', levels:[{ level:0, format:LevelFormat.DECIMAL, text:'%1.', alignment:AlignmentType.LEFT, style:{ run:{ bold:true, color:WA.maroon }, paragraph:{ indent:{ left:400, hanging:300 } } } }] },
+    { reference:'wa-bullets', levels:[{ level:0, format:LevelFormat.BULLET, text:'•', alignment:AlignmentType.LEFT, style:{ run:{ color:WA.amber }, paragraph:{ indent:{ left:360, hanging:240 } } } }] },
+  ] };
+}
+const waNil = () => ({ style:DX().BorderStyle.NONE, size:0, color:'auto' });
+const waNoBorders = () => { const n = waNil(); return { top:n, bottom:n, left:n, right:n, insideHorizontal:n, insideVertical:n }; };
+const waTableBorders = () => { const { BorderStyle } = DX(); const n = waNil(); return {
+  top:{ style:BorderStyle.SINGLE, size:4, color:WA.rule }, bottom:{ style:BorderStyle.SINGLE, size:8, color:WA.maroon },
+  left:n, right:n, insideHorizontal:{ style:BorderStyle.SINGLE, size:4, color:WA.rule }, insideVertical:n }; };
+const CELL_M = { top:100, bottom:100, left:120, right:120 };
+
+// Text runs: anything in [SQUARE BRACKETS] becomes a WA Placeholder run (consultant completes it in Word).
+// Procedure steps and checklist bullets in the content library leave a field blank as "Label: ", "Label: ." or
+// "Label:  — next". Only those rows (opts.blanks) get a [TO BE COMPLETED] placeholder; ordinary sentences that end
+// in a colon to introduce a list or table are left alone.
+function fillBlanks(t) {
+  return t.replace(/:\s*\.?\s*$/, ': [TO BE COMPLETED]')
+          .replace(/:\s+(—|\.)/g, ': [TO BE COMPLETED] $1')
+          .replace(/:\s{2,}(?=[A-Za-z])/g, ': [TO BE COMPLETED] ');
+}
+function runs(text, opts = {}) {
+  const { TextRun } = DX();
+  const { blanks, ...ro } = opts;
+  let s = text == null ? '' : String(text);
+  if(blanks) s = fillBlanks(s);
+  opts = ro;
+  const parts = s.split(/(\[[^\]]+\])/g).filter(x => x !== '');
+  if(!parts.length) return [new TextRun({ text:'', ...opts })];
+  return parts.map(p => /^\[[^\]]+\]$/.test(p) ? new TextRun({ text:p, style:'WAPlaceholder', bold:opts.bold }) : new TextRun({ text:p, ...opts }));
+}
+// Sentence case for headings; keeps acronyms and the plan's defined terms.
+const KEEP_TERMS = ['Crisis Management Team','Incident Commander','Business Continuity Plan','Employee Assistance Program'];
+function sentence(t) {
+  let first = true;
+  let out = String(t).split(/(\s+)/).map(w => {
+    if(/^\s+$/.test(w) || !/[A-Za-z]/.test(w)) return w;
+    if(/^[A-Z]\.\d+$/.test(w)) return w;                 // "A.1" prefixes
+    const caps = (w.match(/[A-Z]/g) || []).length;
+    let r = w;
+    if(!(caps > 1 && !/-/.test(w))) {                      // keep IT, BCP, PPE, COVID…
+      r = first ? w : w.charAt(0).toLowerCase() + w.slice(1);
+      r = r.replace(/-([A-Z])([a-z])/g, (m,a,b) => '-' + a.toLowerCase() + b);
+    }
+    first = false;
+    return r;
+  }).join('');
+  KEEP_TERMS.forEach(k => { out = out.replace(new RegExp(k, 'gi'), k); });
+  return out;
+}
+
+// ── Doc primitives (names unchanged so the annex library below works as before) ──
+// A sentence ending in a colon introduces the list or table after it, so keep the two on the same page.
+function dp(text, opts = {}) { const { Paragraph } = DX(); return new Paragraph({ keepNext: /:\s*$/.test(String(text)), children: runs(text, opts) }); }
+function dh1(text, o = {}) {
+  const { Paragraph, TextRun, HeadingLevel } = DX();
+  const out = [];
+  // Sections that do not start a new page get generous space above so they still read as a new chapter.
+  if(o.eyebrow) out.push(new Paragraph({ style:'WAEyebrow', pageBreakBefore:!!o.pageBreak, spacing: o.pageBreak ? undefined : { before:600, after:40 }, children:[new TextRun(o.eyebrow)] }));
+  out.push(new Paragraph({ heading:HeadingLevel.HEADING_1, pageBreakBefore:!!o.pageBreak && !o.eyebrow, children:[new TextRun(sentence(text))] }));
+  return out;
+}
+function dh2(text) { const { Paragraph, TextRun, HeadingLevel } = DX(); return new Paragraph({ heading:HeadingLevel.HEADING_2, children:[new TextRun(sentence(text))] }); }
+function dh3(text) { const { Paragraph, TextRun, HeadingLevel } = DX(); return new Paragraph({ heading:HeadingLevel.HEADING_3, children:[new TextRun(sentence(text))] }); }
+function dbullet(text) { const { Paragraph } = DX(); return new Paragraph({ numbering:{ reference:'wa-bullets', level:0 }, spacing:{ after:60 }, children: runs(text, { blanks:true }) }); }
+function dnote(text) { const { Paragraph } = DX(); return new Paragraph({ style:'WASmall', children: runs(text) }); }
+function dspacer(before = 160, after = 160) { const { Paragraph, TextRun } = DX(); return new Paragraph({ spacing:{ before:Math.round(before/2), after:Math.round(after/2), line:120, lineRule:DX().LineRuleType.AUTO }, children:[new TextRun({ text:'', size:4 })] }); }
+function dph(label) { const { TextRun } = DX(); return new TextRun({ text:`[${label}]`, style:'WAPlaceholder' }); }
+function dkv(label, value) {
+  const { Paragraph, TextRun } = DX();
+  return new Paragraph({ spacing:{ after:100 }, children:[
+    new TextRun({ text:`${label}:  `, bold:true, color:WA.maroon }),
+    value ? new TextRun({ text:value }) : dph('NOT PROVIDED'),
+  ] });
+}
+// IF / THEN procedure: cream callout, amber spine, numbered steps that restart in every callout.
+let IFTHEN_SEQ = 0;
 function difthen(ifText, steps) {
+  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle } = DX();
+  const instance = ++IFTHEN_SEQ;
+  const n = waNil();
+  const cell = new TableCell({
+    width:{ size:CW, type:WidthType.DXA },
+    shading:{ type:ShadingType.CLEAR, color:'auto', fill:WA.cream },
+    margins:{ top:160, bottom:120, left:240, right:200 },
+    borders:{ left:{ style:BorderStyle.SINGLE, size:24, color:WA.amber }, top:n, bottom:n, right:n },
+    children:[
+      new Paragraph({ style:'WACalloutLabel', children:[new TextRun('If')] }),
+      new Paragraph({ spacing:{ after:140 }, children: runs(ifText.charAt(0).toUpperCase() + ifText.slice(1), { bold:true }) }),
+      new Paragraph({ style:'WACalloutLabel', children:[new TextRun('Then')] }),
+      ...steps.map(s => new Paragraph({ numbering:{ reference:'wa-steps', level:0, instance }, spacing:{ after:60 }, children: runs(s, { blanks:true }) })),
+    ],
+  });
   return [
-    new Paragraph({
-      children: [
-        new TextRun({ text: 'IF ', bold: true, size: 22, color: RED_HEX }),
-        new TextRun({ text: ifText, size: 22, color: '334155', italics: true }),
-        new TextRun({ text: '  —  THEN:', bold: true, size: 22, color: NAVY_HEX }),
-      ],
-      spacing: { before: 200, after: 80 },
-    }),
-    ...steps.map((s, i) => new Paragraph({
-      children: [new TextRun({ text: `${i + 1}.  ${s}`, size: 22, color: '334155' })],
-      spacing: { before: 60, after: 60 },
-      indent: { left: 480 },
-    })),
+    new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths:[CW], borders:waNoBorders(), rows:[new TableRow({ cantSplit:true, children:[cell] })] }),
+    dspacer(120, 120),
   ];
+}
+function waNote(label, text, tone) {
+  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ShadingType, BorderStyle } = DX();
+  const gap = tone === 'gap';
+  const n = waNil();
+  return new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths:[CW], borders:waNoBorders(), rows:[new TableRow({ cantSplit:true, children:[new TableCell({
+    width:{ size:CW, type:WidthType.DXA },
+    shading:{ type:ShadingType.CLEAR, color:'auto', fill: gap ? WA.dangerBg : WA.cream },
+    margins:{ top:120, bottom:120, left:240, right:200 },
+    borders:{ left:{ style:BorderStyle.SINGLE, size:24, color: gap ? WA.danger : WA.forest }, top:n, bottom:n, right:n },
+    children:[new Paragraph({ spacing:{ after:0 }, children:[ new TextRun({ text:label + '  ', bold:true, color: gap ? WA.danger : WA.forest }), ...runs(text) ] })],
+  })] })] });
 }
 
 // ── Tables ────────────────────────────────────────────────────────────────────
-function headerCell(text, pct, fill = NAVY_HEX) {
-  return new TableCell({
-    width: { size: Math.round(9360 * pct / 100), type: WidthType.DXA },
-    shading: { fill, type: ShadingType.CLEAR, color: 'auto' },
-    borders: NO_BORDER,
-    children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 18, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
-  });
+function headCell(text, width, align) {
+  const { TableCell, Paragraph, TextRun, WidthType, ShadingType, VerticalAlign, AlignmentType } = DX();
+  return new TableCell({ width:{ size:width, type:WidthType.DXA }, shading:{ type:ShadingType.CLEAR, color:'auto', fill:WA.maroon }, margins:CELL_M, verticalAlign:VerticalAlign.BOTTOM,
+    children:[new Paragraph({ style:'WATableHead', keepNext:true, alignment: align || AlignmentType.LEFT, children:[new TextRun(text)] })] });
 }
-function dataCell(text, fill = 'FFFFFF', center = false, textColor = '334155', width = 9360) {
-  return new TableCell({
-    width: { size: width, type: WidthType.DXA },
-    shading: { fill, type: ShadingType.CLEAR, color: 'auto' },
-    borders: NO_BORDER,
-    children: [new Paragraph({ children: [new TextRun({ text: text ?? '—', size: 20, color: textColor })], alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT })],
-  });
+function bodyCell(content, width, row, o = {}) {
+  const { TableCell, Paragraph, WidthType, ShadingType, VerticalAlign, AlignmentType } = DX();
+  const children = Array.isArray(content) ? content : runs(content == null || content === '' ? '—' : content, { bold:o.bold, color:o.color });
+  return new TableCell({ width:{ size:width, type:WidthType.DXA }, shading:{ type:ShadingType.CLEAR, color:'auto', fill: o.fill || (row % 2 ? WA.band : WA.white) }, margins:CELL_M, verticalAlign:VerticalAlign.CENTER,
+    children:[new Paragraph({ style:'WATableText', keepNext: !!o.keepNext, alignment: o.align || AlignmentType.LEFT, children })] });
 }
+function riskCell(label, width, keepNext) {
+  const { TextRun } = DX();
+  const b = WA_RISK[label];
+  return bodyCell([new TextRun({ text:label, bold:true, color:b.ink })], width, 0, { fill:b.fill, keepNext });
+}
+function waTable(cols, rows, o = {}) {
+  const { Table, TableRow, WidthType, TableLayoutType } = DX();
+  const head = o.noHead ? [] : [new TableRow({ tableHeader:true, cantSplit:true, children: cols.map(c => headCell(c.title, c.width, c.align)) })];
+  return new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths: cols.map(c => c.width), layout:TableLayoutType.FIXED, borders:waTableBorders(),
+    // Short tables (12 rows or fewer) are kept on one page: keep-with-next on every row but the last.
+    rows:[...head, ...rows.map((r, i) => { const kn = rows.length <= 12 && i < rows.length - 1;
+      return new TableRow({ cantSplit:true, children: r.map((v, j) => (v && v.__cell) ? (kn && v.__band ? riskCell(v.__band, v.__w, true) : v.__cell) : bodyCell(v, cols[j].width, i, { align:cols[j].align, bold:cols[j].bold, keepNext:kn })) }); })] });
+}
+const bandOf = s => s >= 15 ? 'Critical' : s >= 10 ? 'High' : s >= 6 ? 'Moderate' : 'Low';
 
 function riskTable(risks) {
+  const { AlignmentType } = DX();
   const sorted = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact));
-  const COLS = [4, 28, 20, 17, 10, 21];
-  const HEADS = ['#', 'Hazard', 'Likelihood', 'Impact', 'Score', 'Priority'];
-  const hRow = new TableRow({
-    tableHeader: true,
-    children: HEADS.map((t, i) => headerCell(t, COLS[i])),
-  });
-  const dRows = sorted.map((r, idx) => {
+  const cols = [ {title:'#',width:500}, {title:'Hazard',width:2700,bold:true}, {title:'Likelihood',width:1500}, {title:'Impact',width:1500}, {title:'Score',width:900,bold:true}, {title:'Risk band',width:2260} ];
+  return waTable(cols, sorted.map((r, idx) => {
     const s = r.likelihood * r.impact;
-    const lv = s >= 15
-      ? { label: 'CRITICAL', fill: 'FEE2E2', color: '991B1B' }
-      : s >= 10 ? { label: 'HIGH',     fill: 'FFEDD5', color: '9A3412' }
-      : s >= 5  ? { label: 'MEDIUM',   fill: 'FEF9C3', color: '854D0E' }
-      :           { label: 'LOW',      fill: 'DCFCE7', color: '166534' };
-    const fill = idx % 2 === 0 ? 'F8FAFC' : 'FFFFFF';
-    return new TableRow({ children: [
-      dataCell(`${idx + 1}`, fill, true),
-      dataCell(r.name,                        fill),
-      dataCell(`${r.likelihood}  ${L_LABELS[r.likelihood - 1]}`, fill),
-      dataCell(`${r.impact}  ${I_LABELS[r.impact - 1]}`,         fill),
-      dataCell(`${s}`,                        fill, true, NAVY_HEX),
-      dataCell(lv.label,                      lv.fill, true, lv.color),
-    ]});
-  });
-  return new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: [374, 2621, 1872, 1591, 936, 1966], borders: TABLE_BORDERS, rows: [hRow, ...dRows] });
+    return [ `${idx + 1}`, r.name, `${r.likelihood}, ${L_LABELS[r.likelihood - 1]}`, `${r.impact}, ${I_LABELS[r.impact - 1]}`, `${s}`, { __cell: riskCell(bandOf(s), 2260), __band: bandOf(s), __w: 2260 } ];
+  }));
 }
-
-function twoColTable(rows) {
-  // Simple label / value table
-  return new Table({
-    width: { size: 9360, type: WidthType.DXA },
-    columnWidths: [4680, 4680],
-    borders: TABLE_BORDERS,
-    rows: rows.map(([label, value], i) => new TableRow({ children: [
-      dataCell(label, i % 2 === 0 ? 'F1F5F9' : 'FFFFFF'),
-      new TableCell({
-        shading: { fill: i % 2 === 0 ? 'F1F5F9' : 'FFFFFF', type: ShadingType.CLEAR, color: 'auto' },
-        borders: NO_BORDER,
-        children: [new Paragraph({ children: [
-          value ? new TextRun({ text: value, size: 20, color: '334155' }) : dph('TO BE COMPLETED'),
-        ]})],
-      }),
-    ]})),
-  });
+// Label / value table. opts.header: first row is a column header (maroon row).
+function twoColTable(rows, opts = {}) {
+  const { TextRun } = DX();
+  const cols = [ {title:'',width:3600}, {title:'',width:5760} ];
+  let body = rows;
+  if(opts.header) { cols[0].title = rows[0][0]; cols[1].title = rows[0][1] || ''; body = rows.slice(1); }
+  return waTable(cols, body.map(([label, value]) => [ label, value ? value : [dph('TO BE COMPLETED')] ]), { noHead: !opts.header });
 }
-
 function functionsTable(fns) {
-  const COLS = [30, 25, 25, 20];
-  const HEADS = ['Critical Function', 'Why Critical', 'Max Downtime', 'Department'];
-  const hRow = new TableRow({ tableHeader: true, children: HEADS.map((t, i) => headerCell(t, COLS[i])) });
-  const dRows = fns.map((fn, idx) => {
-    const fill = idx % 2 === 0 ? 'F8FAFC' : 'FFFFFF';
-    return new TableRow({ children: [
-      dataCell(fn.name || '[FUNCTION NAME]', fill),
-      dataCell(fn.reason || '—', fill),
-      dataCell(fn.downtime || '—', fill, true),
-      dataCell('[DEPARTMENT]', fill),
-    ]});
-  });
-  return new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: [2808, 2340, 2340, 1872], borders: TABLE_BORDERS, rows: [hRow, ...dRows] });
+  const cols = [ {title:'Critical function',width:2808,bold:true}, {title:'Why critical',width:2340}, {title:'Max downtime',width:2340}, {title:'Department',width:1872} ];
+  return waTable(cols, fns.map(fn => [ fn.name || '[FUNCTION NAME]', fn.reason || '—', fn.downtime || '—', '[DEPARTMENT]' ]));
+}
+function bandKeyTable(rows) {
+  const cols = [ {title:'Score',width:1300,bold:true}, {title:'Risk band',width:1800}, {title:'Treatment',width:6260} ];
+  return waTable(cols, rows.map(([range, band, action]) => [ range, { __cell: riskCell(band, 1800), __band: band, __w: 1800 }, action ]));
 }
 
 // ── Annex content library ──────────────────────────────────────────────────────
@@ -966,7 +1011,7 @@ function annexPages(annexId, state) {
         ['Operations Manager',          ''],
         ['[KEY POSITION]',              ''],
         ['[KEY POSITION]',              ''],
-      ]),
+      ], { header:true }),
       dspacer(120, 60),
 
       dh3('D.2  Sudden Loss of Key Employee'),
@@ -1053,7 +1098,7 @@ function annexPages(annexId, state) {
         ['[PRIMARY SUPPLIER 2]', '[Category — e.g. IT Services]'],
         ['[PRIMARY SUPPLIER 3]', '[Category — e.g. Logistics]'],
         ['[PRIMARY SUPPLIER 4]', '[Category — e.g. Utilities]'],
-      ]),
+      ], { header:true }),
       dspacer(80),
 
       dh3('F.2  Alternate / Backup Suppliers'),
@@ -1062,7 +1107,7 @@ function annexPages(annexId, state) {
         ['[CATEGORY 1]',        '[Alternate Supplier — pre-qualified]'],
         ['[CATEGORY 2]',        '[Alternate Supplier — pre-qualified]'],
         ['[CATEGORY 3]',        '[Alternate Supplier — pre-qualified]'],
-      ]),
+      ], { header:true }),
       dspacer(),
 
       dh3('F.3  Supply Chain Disruption Response'),
@@ -1097,8 +1142,62 @@ function annexPages(annexId, state) {
   return fn ? fn() : [dp('Content for this annex is under development.')];
 }
 
+// ── Cover, header, footer ───────────────────────────────────────────────────
+async function loadLogo() {
+  try { const r = await fetch('assets/wa-lockup-full-color.png'); if(!r.ok) throw new Error(r.status); return await r.arrayBuffer(); }
+  catch(e) { console.warn('Logo not loaded; the plan will use the text name instead.', e); return null; }
+}
+function logoRun(bytes, w, h) {
+  const { ImageRun, TextRun } = DX();
+  return bytes ? new ImageRun({ data:bytes, transformation:{ width:w, height:h } }) : new TextRun({ text:'World Aware', bold:true, color:WA.maroon, size: h > 40 ? 40 : 20 });
+}
+function waHeader(logo, client) {
+  const { Header, Paragraph, TextRun, TabStopType, BorderStyle } = DX();
+  return new Header({ children:[new Paragraph({ style:'WAHeaderFooter', tabStops:[{ type:TabStopType.RIGHT, position:CW }],
+    border:{ bottom:{ style:BorderStyle.SINGLE, size:4, color:WA.rule, space:6 } },
+    children:[ logoRun(logo, 130, 30), new TextRun({ text:`\t${client}  |  Business Continuity Plan`, color:WA.muted }) ] })] });
+}
+function waFooter(versionLabel) {
+  const { Footer, Paragraph, TextRun, TabStopType, PageNumber } = DX();
+  return new Footer({ children:[new Paragraph({ style:'WAHeaderFooter', tabStops:[{ type:TabStopType.RIGHT, position:CW }], children:[
+    new TextRun({ text:'beworldaware.com', bold:true, color:WA.maroon }),
+    new TextRun({ text:'   ' + versionLabel, color:WA.subtle }),
+    new TextRun({ children:['\tPage ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], color:WA.subtle }),
+  ] })] });
+}
+function waCover({ logo, client, industry, dateText, version, preparedBy }) {
+  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, ShadingType } = DX();
+  const n = waNil(); const hair = { style:BorderStyle.SINGLE, size:4, color:WA.rule };
+  const metaRow = (k, v) => new TableRow({ children:[
+    new TableCell({ width:{ size:2200, type:WidthType.DXA }, margins:{ top:100, bottom:100, left:0, right:120 }, children:[new Paragraph({ spacing:{ after:0 }, children:[new TextRun({ text:k, size:18, bold:true, color:WA.muted })] })] }),
+    new TableCell({ width:{ size:7160, type:WidthType.DXA }, margins:{ top:100, bottom:100, left:120, right:0 }, children:[new Paragraph({ spacing:{ after:0 }, children: runs(v) })] }),
+  ] });
+  return [
+    new Paragraph({ spacing:{ after:1800 }, children:[ logoRun(logo, 260, 60) ] }),
+    // Title block: cream panel with a heavy amber band on top, so the client name carries the page.
+    new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths:[CW], borders:waNoBorders(), rows:[new TableRow({ cantSplit:true, children:[new TableCell({
+      width:{ size:CW, type:WidthType.DXA },
+      shading:{ type:ShadingType.CLEAR, color:'auto', fill:WA.cream },
+      margins:{ top:480, bottom:520, left:440, right:440 },
+      borders:{ top:{ style:BorderStyle.SINGLE, size:48, color:WA.amber }, bottom:n, left:n, right:n },
+      children:[
+        new Paragraph({ spacing:{ after:200 }, children:[new TextRun({ text:'Business Continuity Plan', size:30, bold:true, color:WA.amber6 })] }),
+        new Paragraph({ heading:HeadingLevel.TITLE, spacing:{ after:160 }, children: runs(client) }),
+        new Paragraph({ style:'WALead', spacing:{ after:0 }, children: runs(industry) }),
+      ],
+    })] })] }),
+    new Paragraph({ spacing:{ before:0, after:1000 }, children:[new TextRun('')] }),
+    new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths:[2200, 7160], borders:{ top:hair, bottom:hair, left:n, right:n, insideHorizontal:hair, insideVertical:n }, rows:[
+      metaRow('Date', dateText), metaRow('Version', version), metaRow('Prepared by', preparedBy), metaRow('Contact', 'beworldaware.com'),
+    ] }),
+    new Paragraph({ spacing:{ before:480 }, children:[new TextRun({ text:`Confidential. This plan contains operational details about ${client}. Share it only with the people named in the distribution list.`, size:18, color:WA.muted })] }),
+  ];
+}
+
 // ── Master document builder ───────────────────────────────────────────────────
 async function generateDocument(state) {
+  const { Document, Packer, Paragraph, TextRun, TabStopType, AlignmentType } = DX();
+  IFTHEN_SEQ = 0;
   const { profile: p, functions: fns, preparedness: pr, risks, config: c } = state;
   const co   = p.companyName     || '[COMPANY NAME]';
   const city = p.address         || '[ADDRESS]';
@@ -1109,692 +1208,454 @@ async function generateDocument(state) {
   const comp = c.consultantCompany || 'World Aware';
   const ver  = c.planVersion     || '1.0';
   const dt   = c.planDate        || new Date().toISOString().slice(0, 10);
+  const dtText = fmtDate(dt);
 
   const sortedRisks = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact));
   const critN  = sortedRisks.filter(r => r.likelihood * r.impact >= 15).length;
   const highN  = sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 10 && s < 15; }).length;
+  const medN   = sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 6 && s < 10; }).length;
+  const lowN   = sortedRisks.filter(r => r.likelihood * r.impact < 6).length;
   const gaps   = [pr.hasExistingPlan === 'no', pr.hasBackupPower === 'no', pr.remoteWork === 'no', pr.hasOffsiteBackup === 'no'].filter(Boolean).length;
+  const plural = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`;
 
   const selectedAnnexes = ANNEXES.filter(a => c.selectedAnnexes.includes(a.id));
-
-  const tocLines = [
-    ...REQUIRED_SECTIONS.map((s, i) => [i + 1, s.label]),
-  ];
+  const tocLines = REQUIRED_SECTIONS.map((s, i) => [i + 1, s.label]);
   const annexLetters = selectedAnnexes.map((a, i) => [String.fromCharCode(65 + i), a.title]);
+  const logo = await loadLogo();
+  const tocLine = (k, label) => new Paragraph({ spacing:{ before:80, after:80 }, tabStops:[{ type:TabStopType.LEFT, position:900 }], children:[
+    new TextRun({ text:k, bold:true, color:WA.amber6 }), new TextRun({ text:'\t' + sentence(label) }) ] });
+  // Page breaks only before the executive summary and each annex; other sections flow on
+  // so short section endings do not leave near-empty pages.
+  const sec = (n, title) => dh1(title, { eyebrow:`Section ${n}`, pageBreak: n === 1 });
 
-  // ── Footer ─────────────────────────────────────────────────────────────────
-  const docFooter = new Footer({
-    children: [
-      new Paragraph({
-        children: [
-          new TextRun({ text: `${co}  |  Disaster & Continuity Plan  |  v${ver}  |  ${comp}`, size: 16, color: '94A3B8' }),
-          new TextRun({ text: '    Page ', size: 16, color: '94A3B8' }),
-          new TextRun({ children: [PageNumber.CURRENT], size: 16, color: "94A3B8" }),
-        ],
-        alignment: AlignmentType.CENTER,
-        border: { top: { style: BorderStyle.SINGLE, size: 2, color: 'E2E8F0' } },
-      }),
-    ],
-  });
+  const body = [
+    // ── CONTENTS ──
+    ...dh1('Contents'),
+    ...tocLines.map(([n, label]) => tocLine(String(n), label)),
+    ...(annexLetters.length > 0 ? [
+      new Paragraph({ spacing:{ before:240, after:60 }, children:[new TextRun({ text:'Annexes', bold:true, color:WA.muted })] }),
+      ...annexLetters.map(([letter, title]) => tocLine(letter, title)),
+    ] : []),
+    dspacer(160, 0),
+    dnote('Each section and annex is a Word heading. Open View > Navigation Pane in Word to jump between them.'),
+
+    // ── SECTION 1: EXECUTIVE SUMMARY ──
+    ...sec(1, 'Executive Summary'),
+    new Paragraph({ style:'WALead', children: runs(`${co} has developed this Disaster and Business Continuity Plan (BCP) to ensure the organization can prepare for, respond to, and recover from events that disrupt normal operations. This plan establishes clear procedures, defined responsibilities, and recovery priorities to minimize the impact of disruptions on employees, customers, and business operations.`) }),
+    dh2('Key Findings'),
+    twoColTable([
+      ['Critical functions identified',  `${plural(fns.length, 'function')} documented`],
+      ['Total hazards assessed',         plural(risks.length, 'hazard')],
+      ['Critical risks (score 15–25)',   `${critN}. Require immediate action`],
+      ['High risks (score 10–14)',       `${highN}. Require priority treatment`],
+      ['Preparedness gaps identified',   `${plural(gaps, 'gap')}. See Section 3`],
+      ['Plan version',                   `${ver}, dated ${dtText}`],
+    ]),
+    dh2('Activation Authority'),
+    dp(`This plan may be activated by any member of the Crisis Management Team when an event threatens or disrupts normal ${co} operations. Activation does not require all conditions to be met — use judgment based on the nature and scope of the event.`),
+    dh2('Top Priority Risks'),
+    ...(sortedRisks.length ? [waTable(
+      [ {title:'Hazard',width:5000,bold:true}, {title:'Score',width:1600,bold:true}, {title:'Risk band',width:2760} ],
+      sortedRisks.slice(0, 5).map(r => { const s = r.likelihood * r.impact; return [ r.name, `${s}`, { __cell: riskCell(bandOf(s), 2760), __band: bandOf(s), __w: 2760 } ]; })
+    )] : [dp('[No risks rated yet]')]),
+
+    // ── SECTION 2: INTRODUCTION & PURPOSE ──
+    ...sec(2, 'Introduction & Purpose'),
+    dh2('Plan Purpose'),
+    dp(`This Business Continuity Plan (BCP) establishes the framework for ${co} to respond to and recover from disruptive events while maintaining critical business functions. It is designed as a working template.`),
+    waNote('To complete.', 'Text shown like [THIS] is a field to complete. In Word, select it and type over it; the highlight goes away with the brackets.'),
+    dh2('Scope'),
+    dp(`This plan applies to all ${co} employees, contractors, and facilities. It covers ${fns.length} identified critical business function${fns.length !== 1 ? 's' : ''} across ${locs} location${locs !== '1' ? 's' : ''}.`),
+    dh2('Objectives'),
+    dbullet('Protect employee safety and wellbeing above all other priorities.'),
+    dbullet('Maintain or rapidly restore critical business functions.'),
+    dbullet('Minimize financial losses, reputational damage, and regulatory exposure.'),
+    dbullet('Communicate effectively with employees, customers, and stakeholders.'),
+    dbullet('Ensure a systematic and documented recovery process.'),
+    dh2('Plan Assumptions'),
+    dbullet('At least one member of the Crisis Management Team is reachable at all times.'),
+    dbullet('Employees have been trained on their roles in this plan.'),
+    dbullet('This plan is reviewed and updated at least annually.'),
+    dbullet('Individual departments maintain department-level procedures aligned with this plan.'),
+    dh2('Key Definitions'),
+    dkv('Crisis Management Team (CMT)', 'The group of senior leaders responsible for activating and managing this plan.'),
+    dkv('Recovery Time Objective (RTO)', 'The maximum time a critical function can be offline before unacceptable impact occurs.'),
+    dkv('Recovery Point Objective (RPO)', 'The maximum age of data that must be recovered — defines backup frequency requirements.'),
+    dkv('Maximum Tolerable Downtime (MTD)', 'The longest period the organization can function without a critical resource.'),
+    dkv('Incident Commander', 'The designated leader responsible for overall coordination of the response.'),
+
+    // ── SECTION 3: SITUATION OVERVIEW ──
+    ...sec(3, 'Situation Overview'),
+    dh2('Organization Profile'),
+    twoColTable([
+      ['Legal name',              co],
+      ['Industry',                ind],
+      ['Headquarters',            city],
+      ['Number of employees',     emp],
+      ['Number of locations',     locs],
+      ['Primary contact',         ''],
+      ['Title',                   ''],
+      ['Emergency phone',         ''],
+      ['Emergency email',         ''],
+    ]),
+    dh2('Critical Business Functions'),
+    dp('The following functions have been identified as critical to operations. They represent the highest recovery priorities.'),
+    fns.length > 0 ? functionsTable(fns) : dp('[No critical functions were entered. Please complete the intake form.]'),
+    dh2('Preparedness Status'),
+    twoColTable([
+      ['Existing emergency plan',   pr.hasExistingPlan === 'yes' ? 'In place. Review for alignment with this BCP' : pr.hasExistingPlan === 'no' ? 'Not in place. High-priority gap' : '[Not specified]'],
+      ['Backup power (generator)',  pr.hasBackupPower  === 'yes' ? 'In place. Document capacity and test schedule' : pr.hasBackupPower  === 'no' ? 'Not in place. Evaluate need' : '[Not specified]'],
+      ['Remote work capability',    pr.remoteWork === 'yes-all' ? 'Yes, all employees capable' : pr.remoteWork === 'partial' ? 'Partially. Identify roles that cannot work remotely' : pr.remoteWork === 'no' ? 'No remote capability. Significant gap' : '[Not specified]'],
+      ['Offsite data backup',       pr.hasOffsiteBackup === 'yes' ? 'In place. Verify frequency and restore testing' : pr.hasOffsiteBackup === 'no' ? 'Not in place. Critical gap for data recovery' : '[Not specified]'],
+    ]),
+    ...(gaps > 0 ? [
+      dspacer(160, 80),
+      waNote('Gap identified.', `${gaps} preparedness gap${gaps > 1 ? 's' : ''} identified. The items marked "Not in place" or "No" above represent significant gaps in organizational preparedness. Each gap should be assigned an owner and a target completion date immediately.`, 'gap'),
+    ] : []),
+
+    // ── SECTION 4: RISK ASSESSMENT ──
+    ...sec(4, 'Risk Assessment'),
+    dh2('Methodology'),
+    dp('Risk scores are calculated using a 5×5 Likelihood × Impact matrix (ISO 31000). Each hazard is rated on two axes:'),
+    dbullet('Likelihood: 1 (Rare) to 5 (Almost Certain)'),
+    dbullet('Impact: 1 (Insignificant) to 5 (Catastrophic)'),
+    dbullet('Risk Score = Likelihood × Impact (range: 1–25)'),
+    dspacer(120, 60),
+    bandKeyTable([
+      ['1–5',   'Low',      'Monitor; maintain standard controls'],
+      ['6–9',   'Moderate',   'Implement additional controls; include in annual review'],
+      ['10–14', 'High',     'Priority treatment; specific response plan required'],
+      ['15–25', 'Critical', 'Immediate executive attention; dedicated annex required'],
+    ]),
+    dh2('Risk Register'),
+    ...(risks.length > 0 ? [riskTable(risks)] : [dp('[No risks were entered during the risk assessment. Please complete Phase 2 of the intake process.]')]),
+    dh2('Risk Summary'),
+    twoColTable([
+      ['Critical (15–25)', plural(critN, 'hazard')],
+      ['High (10–14)',     plural(highN, 'hazard')],
+      ['Moderate (6–9)',     plural(medN, 'hazard')],
+      ['Low (1–5)',        plural(lowN, 'hazard')],
+      ['Total assessed',   plural(risks.length, 'hazard')],
+    ]),
+
+    // ── SECTION 5: COMMUNICATIONS ──
+    ...sec(5, 'Communications'),
+    dh2('Notification Cascade'),
+    dp('When an incident is declared, notifications must be issued in the following sequence:'),
+    ...difthen('an incident is declared', [
+      'Incident Commander notifies all Crisis Management Team members within 1 hour.',
+      'Department heads notify their direct reports within 2 hours.',
+      'HR notifies all employees via [EMAIL / MASS NOTIFICATION SYSTEM] within 4 hours.',
+      'External communications (customers, vendors, media) as directed by Incident Commander.',
+    ]),
+    dh2('Crisis Management Team Contacts'),
+    twoColTable([
+      ['Role',                    'Name  |  Phone  |  Email'],
+      ['Incident Commander',      ''],
+      ['Operations Lead',         ''],
+      ['IT / Technology Lead',    ''],
+      ['HR Lead',                 ''],
+      ['Finance Lead',            ''],
+      ['Communications / PR',     ''],
+      ['Legal Counsel',           ''],
+    ], { header:true }),
+    dh2('Stakeholder Communication Matrix'),
+    twoColTable([
+      ['Audience',       'Timing'],
+      ['Employees',      'Within 4 hours of activation'],
+      ['Key Customers',  'Within 24 hours — prioritize largest accounts'],
+      ['Key Vendors',    'Within 24 hours — prioritize single-source suppliers'],
+      ['Board / Owners', 'Immediately upon activation'],
+      ['Regulators',     'Per applicable regulatory requirements'],
+      ['Media / Press',  'Only via designated spokesperson — no employee comments'],
+      ['General Public', 'Via press release if broad public impact — legal review required'],
+    ], { header:true }),
+    dh2('Communication Templates'),
+    dh3('Employee Notification — Initial Alert'),
+    dp('[SUBJECT: {Company Name} — Emergency Notification]'),
+    dp('[SALUTATION],'),
+    dp(`[${co}] is responding to [DESCRIBE INCIDENT] that occurred on [DATE / TIME]. Your safety is our first priority.`),
+    dp('[Describe immediate actions employees should take: e.g., work from home, report to alternate location, stand by for further instructions.]'),
+    dp(`Updates will be provided every [X hours] via [CHANNEL]. For questions, contact [NAME] at [PHONE / EMAIL].`),
+    dh3('Customer Notification — Service Impact'),
+    dp('[SUBJECT: Important Update Regarding Your {Product / Service}]'),
+    dp('Dear [CUSTOMER NAME],'),
+    dp(`We are writing to inform you that [${co}] is currently experiencing [BRIEF DESCRIPTION OF ISSUE] which may affect [DESCRIBE IMPACT ON CUSTOMER]. We sincerely apologize for any inconvenience.`),
+    dp('[Describe what you are doing to resolve the issue and the expected timeline.]'),
+    dp(`If you have urgent needs, please contact [NAME] at [PHONE / EMAIL]. We appreciate your patience.`),
+
+    // ── SECTION 6: TRAINING & MAINTENANCE ──
+    ...sec(6, 'Training & Maintenance'),
+    dh2('Training Requirements'),
+    twoColTable([
+      ['Audience',              'Training Content'],
+      ['All employees',         'Emergency procedures, evacuation routes, reporting protocols — Annually'],
+      ['Crisis Management Team','Full plan review and tabletop exercise — Annually'],
+      ['Department managers',   'Department-level BCP procedures — Annually'],
+      ['New hires',             'Basic emergency orientation — Within 30 days of hire'],
+      ['IT staff',              'IT DR procedures and backup restore test — Annually'],
+    ], { header:true }),
+    dh2('Exercise Schedule'),
+    twoColTable([
+      ['Exercise Type',             'Frequency'],
+      ['Fire / Evacuation Drill',   'Twice per year'],
+      ['BCP Tabletop Exercise',     'Annually — CMT and key staff'],
+      ['IT Disaster Recovery Test', 'Annually — restore from backup, document results'],
+      ['Communication Tree Test',   'Annually — test all emergency contacts'],
+      ['Full-Scale Exercise',       'Every 2–3 years — simulate major incident'],
+    ], { header:true }),
+    dh2('Plan Review & Update Schedule'),
+    dbullet(`Annual Review: Every year on [TARGET MONTH], or more frequently if required.`),
+    dbullet('Trigger Review: After any activation, significant organizational change, or near-miss event.'),
+    dbullet('Owner: Incident Commander or designated BCP Coordinator.'),
+    dbullet(`Next Scheduled Review: [DATE].`),
+    dh2('Distribution List'),
+    twoColTable([
+      ['Recipient',              'Title'],
+      ['[NAME]',                '[Incident Commander]'],
+      ['[NAME]',                '[Operations Lead]'],
+      ['[NAME]',                '[IT Lead]'],
+      ['[NAME]',                '[HR Lead]'],
+      ['[DEPARTMENT MANAGER]',  '[Department]'],
+      ['External Location',     'Offsite copy — [LOCATION / CLOUD FOLDER]'],
+    ], { header:true }),
+    dnote(`Document prepared by ${cons}, ${comp}. Version ${ver}, ${dtText}.`),
+
+    // ── ANNEXES ──
+    ...selectedAnnexes.flatMap((a, i) => {
+      const L = String.fromCharCode(65 + i);
+      return [
+        ...dh1(a.title, { eyebrow:`Annex ${L}`, pageBreak:true }),
+        new Paragraph({ style:'WALead', children: runs(`This annex is part of the ${co} Business Continuity Plan (version ${ver}).`) }),
+        ...annexPages(a.id, state),
+        new Paragraph({ style:'WASmall', spacing:{ before:360 }, children:[new TextRun(`End of Annex ${L}`)] }),
+      ];
+    }),
+  ];
 
   const doc = new Document({
     creator: comp,
-    title:   `${co} — Disaster & Business Continuity Plan`,
-    description: `Prepared by ${cons} · ${comp} · Version ${ver}`,
-    styles: {
-      default: {
-        document: {
-          run: { font: 'Calibri', size: 22 },
-        },
-      },
-    },
-    sections: [{
-      properties: {
-        page: {
-          size: { width: 12240, height: 15840 }, margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
-        },
-      },
-      footers: { default: docFooter },
-      children: [
-
-        // ══════════════════════════════════════════════════════════════════════
-        // TITLE PAGE
-        // ══════════════════════════════════════════════════════════════════════
-        dspacer(2400, 480),
-        new Paragraph({ children: [new TextRun({ text: comp.toUpperCase(), bold: true, size: 20, color: BRAND_HEX, allCaps: true })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }),
-        new Paragraph({ children: [new TextRun({ text: 'DISASTER & BUSINESS CONTINUITY PLAN', bold: true, size: 52, color: NAVY_HEX })], alignment: AlignmentType.CENTER, spacing: { before: 60, after: 160 } }),
-        new Paragraph({
-          children: [new TextRun({ text: '', size: 8 })],
-          border: { top: { style: BorderStyle.SINGLE, size: 12, color: BRAND_HEX }, bottom: { style: BorderStyle.SINGLE, size: 12, color: BRAND_HEX } },
-          spacing: { before: 20, after: 20 },
-          alignment: AlignmentType.CENTER,
-        }),
-        dspacer(240, 240),
-        new Paragraph({ children: [new TextRun({ text: co, bold: true, size: 40, color: NAVY_HEX })], alignment: AlignmentType.CENTER, spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: ind, size: 24, color: GRAY_HEX })], alignment: AlignmentType.CENTER, spacing: { after: 640 } }),
-        twoColTable([
-          ['Prepared by',      cons],
-          ['Consulting Firm',  comp],
-          ['Plan Version',     `Version ${ver}`],
-          ['Date',             dt],
-          ['Classification',   'CONFIDENTIAL — Authorized Personnel Only'],
-        ]),
-        dspacer(640, 160),
-        new Paragraph({ children: [new TextRun({ text: 'This document contains sensitive operational information. Distribution is restricted to authorized personnel only.', size: 18, color: '94A3B8', italics: true })], alignment: AlignmentType.CENTER }),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // TABLE OF CONTENTS
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('Table of Contents'),
-        dspacer(80, 40),
-        ...tocLines.map(([n, label]) => new Paragraph({
-          children: [
-            new TextRun({ text: `${n}.  ${label}`, size: 22, color: NAVY_HEX }),
-            new TextRun({ text: '\t[pg]', size: 22, color: 'CBD5E1' }),
-          ],
-          spacing: { before: 100, after: 100 },
-          tabStops: [{ type: TabStopType.RIGHT, position: convertInchesToTwip ? convertInchesToTwip(6) : 8640, leader: TabStopLeader?.DOT ?? 'dot' }],
-        })),
-        ...(annexLetters.length > 0 ? [
-          dspacer(120, 40),
-          new Paragraph({ children: [new TextRun({ text: 'Annexes', bold: true, size: 22, color: GRAY_HEX })], spacing: { before: 60, after: 60 } }),
-          ...annexLetters.map(([letter, title]) => new Paragraph({
-            children: [new TextRun({ text: `Annex ${letter}.  ${title}`, size: 22, color: NAVY_HEX }), new TextRun({ text: '\t[pg]', size: 22, color: 'CBD5E1' })],
-            spacing: { before: 100, after: 100 },
-            tabStops: [{ type: TabStopType.RIGHT, position: convertInchesToTwip ? convertInchesToTwip(6) : 8640, leader: TabStopLeader?.DOT ?? 'dot' }],
-          })),
-        ] : []),
-        dnote('Note: Update page numbers after final review in Microsoft Word (right-click TOC → Update Field → Update entire table).'),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION 1 — EXECUTIVE SUMMARY
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('1.  Executive Summary'),
-        dp(`${co} has developed this Disaster and Business Continuity Plan (BCP) to ensure the organization can prepare for, respond to, and recover from events that disrupt normal operations. This plan establishes clear procedures, defined responsibilities, and recovery priorities to minimize the impact of disruptions on employees, customers, and business operations.`),
-        dspacer(80, 40),
-        dh2('Key Findings'),
-        twoColTable([
-          ['Critical Functions Identified',  `${fns.length} function${fns.length !== 1 ? 's' : ''} documented`],
-          ['Total Hazards Assessed',         `${risks.length} hazard${risks.length !== 1 ? 's' : ''}`],
-          ['Critical Risks (Score 15–25)',    `${critN} — Require immediate action`],
-          ['High Risks (Score 10–14)',        `${highN} — Require priority treatment`],
-          ['Preparedness Gaps Identified',   `${gaps} gap${gaps !== 1 ? 's' : ''} — See Section 2`],
-          ['Plan Version',                   `${ver} — Dated ${dt}`],
-        ]),
-        dspacer(),
-        dh2('Activation Authority'),
-        dp(`This plan may be activated by any member of the Crisis Management Team when an event threatens or disrupts normal ${co} operations. Activation does not require all conditions to be met — use judgment based on the nature and scope of the event.`),
-        dspacer(80, 40),
-        dh2('Top Priority Risks'),
-        ...(sortedRisks.slice(0, 5).map((r, i) => {
-          const s = r.likelihood * r.impact;
-          const lv = s >= 15 ? 'CRITICAL' : s >= 10 ? 'HIGH' : s >= 5 ? 'MEDIUM' : 'LOW';
-          return dbullet(`${r.name}  —  Score: ${s} (${lv})`);
-        })),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION 2 — INTRODUCTION & PURPOSE
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('2.  Introduction & Purpose'),
-        dh2('Plan Purpose'),
-        dp(`This Business Continuity Plan (BCP) establishes the framework for ${co} to respond to and recover from disruptive events while maintaining critical business functions. It is designed as a working template — orange bracketed fields marked ${''} should be reviewed and completed during implementation.`),
-        dspacer(80, 40),
-        dh2('Scope'),
-        dp(`This plan applies to all ${co} employees, contractors, and facilities. It covers ${fns.length} identified critical business function${fns.length !== 1 ? 's' : ''} across ${locs} location${locs !== '1' ? 's' : ''}.`),
-        dspacer(80, 40),
-        dh2('Objectives'),
-        dbullet('Protect employee safety and wellbeing above all other priorities.'),
-        dbullet('Maintain or rapidly restore critical business functions.'),
-        dbullet('Minimize financial losses, reputational damage, and regulatory exposure.'),
-        dbullet('Communicate effectively with employees, customers, and stakeholders.'),
-        dbullet('Ensure a systematic and documented recovery process.'),
-        dspacer(80, 40),
-        dh2('Plan Assumptions'),
-        dbullet('At least one member of the Crisis Management Team is reachable at all times.'),
-        dbullet('Employees have been trained on their roles in this plan.'),
-        dbullet('This plan is reviewed and updated at least annually.'),
-        dbullet('Individual departments maintain department-level procedures aligned with this plan.'),
-        dspacer(80, 40),
-        dh2('Key Definitions'),
-        dkv('Crisis Management Team (CMT)', 'The group of senior leaders responsible for activating and managing this plan.'),
-        dkv('Recovery Time Objective (RTO)', 'The maximum time a critical function can be offline before unacceptable impact occurs.'),
-        dkv('Recovery Point Objective (RPO)', 'The maximum age of data that must be recovered — defines backup frequency requirements.'),
-        dkv('Maximum Tolerable Downtime (MTD)', 'The longest period the organization can function without a critical resource.'),
-        dkv('Incident Commander', 'The designated leader responsible for overall coordination of the response.'),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION 3 — SITUATION OVERVIEW
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('3.  Situation Overview'),
-        dh2('Organization Profile'),
-        twoColTable([
-          ['Legal Name',              co],
-          ['Industry',                ind],
-          ['Headquarters',            city],
-          ['Number of Employees',     emp],
-          ['Number of Locations',     locs],
-          ['Primary Contact',         ''],
-          ['Title',                   ''],
-          ['Emergency Phone',         ''],
-          ['Emergency Email',         ''],
-        ]),
-        dspacer(),
-        dh2('Critical Business Functions'),
-        dp('The following functions have been identified as critical to operations. They represent the highest recovery priorities.'),
-        fns.length > 0 ? functionsTable(fns) : dp('[No critical functions were entered. Please complete the intake form.]'),
-        dspacer(),
-        dh2('Preparedness Status'),
-        twoColTable([
-          ['Existing Emergency Plan',   pr.hasExistingPlan === 'yes' ? '✓ In place — review for alignment with this BCP' : pr.hasExistingPlan === 'no' ? '✗ Not in place — HIGH PRIORITY gap' : '[Not specified]'],
-          ['Backup Power (Generator)',  pr.hasBackupPower  === 'yes' ? '✓ In place — document capacity and test schedule' : pr.hasBackupPower  === 'no' ? '✗ Not in place — evaluate need' : '[Not specified]'],
-          ['Remote Work Capability',    pr.remoteWork === 'yes-all' ? '✓ All employees capable' : pr.remoteWork === 'partial' ? '⚠ Partial — identify roles that cannot work remotely' : pr.remoteWork === 'no' ? '✗ No remote capability — significant gap' : '[Not specified]'],
-          ['Offsite Data Backup',       pr.hasOffsiteBackup === 'yes' ? '✓ In place — verify frequency and restore testing' : pr.hasOffsiteBackup === 'no' ? '✗ Not in place — CRITICAL gap for data recovery' : '[Not specified]'],
-        ]),
-        ...(gaps > 0 ? [
-          dspacer(80, 40),
-          new Paragraph({ children: [new TextRun({ text: `⚠  ${gaps} Preparedness Gap${gaps > 1 ? 's' : ''} Identified`, bold: true, size: 24, color: RED_HEX })], spacing: { before: 160, after: 80 } }),
-          dp('The items marked ✗ above represent significant gaps in organizational preparedness. Each gap should be assigned an owner and a target completion date immediately.'),
-        ] : []),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION 4 — RISK ASSESSMENT
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('4.  Risk Assessment'),
-        dh2('Methodology'),
-        dp('Risk scores are calculated using a 5×5 Likelihood × Impact matrix (ISO 31000). Each hazard is rated on two axes:'),
-        dbullet('Likelihood: 1 (Rare) → 5 (Almost Certain)'),
-        dbullet('Impact: 1 (Insignificant) → 5 (Catastrophic)'),
-        dbullet('Risk Score = Likelihood × Impact (range: 1–25)'),
-        dspacer(80, 40),
-        twoColTable([
-          ['1–4',   'LOW — Monitor; maintain standard controls'],
-          ['5–9',   'MEDIUM — Implement additional controls; include in annual review'],
-          ['10–14', 'HIGH — Priority treatment; specific response plan required'],
-          ['15–25', 'CRITICAL — Immediate executive attention; dedicated annex required'],
-        ]),
-        dspacer(),
-        dh2('Risk Register'),
-        ...(risks.length > 0
-          ? [riskTable(risks)]
-          : [dp('[No risks were entered during the risk assessment. Please complete Phase 2 of the intake process.]')]
-        ),
-        dspacer(),
-        dh2('Risk Summary'),
-        twoColTable([
-          ['Critical (15–25)', `${critN} hazard${critN !== 1 ? 's' : ''}`],
-          ['High (10–14)',     `${highN} hazard${highN !== 1 ? 's' : ''}`],
-          ['Medium (5–9)',     `${sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 5 && s < 10; }).length} hazard${sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 5 && s < 10; }).length !== 1 ? 's' : ''}`],
-          ['Low (1–4)',        `${sortedRisks.filter(r => r.likelihood * r.impact < 5).length} hazard${sortedRisks.filter(r => r.likelihood * r.impact < 5).length !== 1 ? 's' : ''}`],
-          ['Total Assessed',  `${risks.length} hazard${risks.length !== 1 ? 's' : ''}`],
-        ]),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION 5 — COMMUNICATIONS
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('5.  Communications'),
-        dh2('Notification Cascade'),
-        dp('When an incident is declared, notifications must be issued in the following sequence:'),
-        dbullet('Step 1 — Incident Commander notifies all Crisis Management Team members within 1 hour.'),
-        dbullet('Step 2 — Department heads notify their direct reports within 2 hours.'),
-        dbullet('Step 3 — HR notifies all employees via [EMAIL / MASS NOTIFICATION SYSTEM] within 4 hours.'),
-        dbullet('Step 4 — External communications (customers, vendors, media) as directed by Incident Commander.'),
-        dspacer(),
-        dh2('Crisis Management Team Contacts'),
-        twoColTable([
-          ['Role',                    'Name  |  Phone  |  Email'],
-          ['Incident Commander',      ''],
-          ['Operations Lead',         ''],
-          ['IT / Technology Lead',    ''],
-          ['HR Lead',                 ''],
-          ['Finance Lead',            ''],
-          ['Communications / PR',     ''],
-          ['Legal Counsel',           ''],
-        ]),
-        dspacer(),
-        dh2('Stakeholder Communication Matrix'),
-        twoColTable([
-          ['Audience',       'Timing',         ],
-          ['Employees',      'Within 4 hours of activation'],
-          ['Key Customers',  'Within 24 hours — prioritize largest accounts'],
-          ['Key Vendors',    'Within 24 hours — prioritize single-source suppliers'],
-          ['Board / Owners', 'Immediately upon activation'],
-          ['Regulators',     'Per applicable regulatory requirements'],
-          ['Media / Press',  'Only via designated spokesperson — no employee comments'],
-          ['General Public', 'Via press release if broad public impact — legal review required'],
-        ]),
-        dspacer(),
-        dh2('Communication Templates'),
-        dh3('Employee Notification — Initial Alert'),
-        dp('[SUBJECT: {Company Name} — Emergency Notification]'),
-        dp('[SALUTATION],'),
-        dp(`[${co}] is responding to [DESCRIBE INCIDENT] that occurred on [DATE / TIME]. Your safety is our first priority.`),
-        dp('[Describe immediate actions employees should take: e.g., work from home, report to alternate location, stand by for further instructions.]'),
-        dp(`Updates will be provided every [X hours] via [CHANNEL]. For questions, contact [NAME] at [PHONE / EMAIL].`),
-        dspacer(80, 40),
-        dh3('Customer Notification — Service Impact'),
-        dp('[SUBJECT: Important Update Regarding Your {Product / Service}]'),
-        dp('Dear [CUSTOMER NAME],'),
-        dp(`We are writing to inform you that [${co}] is currently experiencing [BRIEF DESCRIPTION OF ISSUE] which may affect [DESCRIBE IMPACT ON CUSTOMER]. We sincerely apologize for any inconvenience.`),
-        dp('[Describe what you are doing to resolve the issue and the expected timeline.]'),
-        dp(`If you have urgent needs, please contact [NAME] at [PHONE / EMAIL]. We appreciate your patience.`),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SECTION 6 — TRAINING & MAINTENANCE
-        // ══════════════════════════════════════════════════════════════════════
-        dpb(),
-        dh1('6.  Training & Maintenance'),
-        dh2('Training Requirements'),
-        twoColTable([
-          ['Audience',              'Training Content',              ],
-          ['All employees',         'Emergency procedures, evacuation routes, reporting protocols — Annually'],
-          ['Crisis Management Team','Full plan review and tabletop exercise — Annually'],
-          ['Department managers',   'Department-level BCP procedures — Annually'],
-          ['New hires',             'Basic emergency orientation — Within 30 days of hire'],
-          ['IT staff',              'IT DR procedures and backup restore test — Annually'],
-        ]),
-        dspacer(),
-        dh2('Exercise Schedule'),
-        twoColTable([
-          ['Exercise Type',             'Frequency',   ],
-          ['Fire / Evacuation Drill',   'Twice per year'],
-          ['BCP Tabletop Exercise',     'Annually — CMT and key staff'],
-          ['IT Disaster Recovery Test', 'Annually — restore from backup, document results'],
-          ['Communication Tree Test',   'Annually — test all emergency contacts'],
-          ['Full-Scale Exercise',       'Every 2–3 years — simulate major incident'],
-        ]),
-        dspacer(),
-        dh2('Plan Review & Update Schedule'),
-        dbullet(`Annual Review: Every year on [TARGET MONTH], or more frequently if required.`),
-        dbullet('Trigger Review: After any activation, significant organizational change, or near-miss event.'),
-        dbullet('Owner: Incident Commander or designated BCP Coordinator.'),
-        dbullet(`Next Scheduled Review: .`),
-        dspacer(),
-        dh2('Distribution List'),
-        twoColTable([
-          ['Recipient',              'Title',            ],
-          ['[NAME]',                '[Incident Commander]'],
-          ['[NAME]',                '[Operations Lead]'],
-          ['[NAME]',                '[IT Lead]'],
-          ['[NAME]',                '[HR Lead]'],
-          ['[DEPARTMENT MANAGER]',  '[Department]'],
-          ['External Location',     'Offsite copy — [LOCATION / CLOUD FOLDER]'],
-        ]),
-        dnote(`Document prepared by ${cons} · ${comp} · Version ${ver} · ${dt}`),
-
-        // ══════════════════════════════════════════════════════════════════════
-        // ANNEXES
-        // ══════════════════════════════════════════════════════════════════════
-        ...selectedAnnexes.flatMap((a, i) => [
-          dpb(),
-          dh1(`Annex ${String.fromCharCode(65 + i)}:  ${a.icon}  ${a.title}`),
-          dp(`This annex is part of the ${co} Disaster & Business Continuity Plan (v${ver}).`),
-          dspacer(80, 40),
-          ...annexPages(a.id, state),
-          dspacer(),
-          new Paragraph({
-            children: [new TextRun({ text: `— End of Annex ${String.fromCharCode(65 + i)} —`, size: 18, color: '94A3B8', italics: true })],
-            alignment: AlignmentType.CENTER,
-          }),
-        ]),
-
-      ],
-    }],
+    title:   `${co} Business Continuity Plan`,
+    description: `Prepared by ${cons}, ${comp}. Version ${ver}`,
+    styles: waStyles(),
+    numbering: waNumbering(),
+    sections: [
+      { properties:{ page: WA_PAGE }, children: waCover({ logo, client:co, industry:[ind, p.employees && `${p.employees} employees`, p.locations && `${p.locations} location${p.locations !== '1' ? 's' : ''}`].filter(Boolean).join(', '), dateText:dtText, version:ver, preparedBy:`${comp} · ${cons}` }) },
+      { properties:{ page: WA_PAGE }, headers:{ default: waHeader(logo, co) }, footers:{ default: waFooter(`Version ${ver}  |  ${dtText}`) }, children: body },
+    ],
   });
 
   const blob = await Packer.toBlob(doc);
-  const safeName = co.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-  saveAs(blob, `${safeName}_BCP_v${ver}_${dt}.docx`);
+  saveAs(blob, `${safeFileName(co)}_BCP_v${ver}_${dt}.docx`);
 }
 
 // ── PHASE 3: PLAN CONFIG ─────────────────────────────────────────────────────
-function StepConfig({ config, onChange, risks }) {
+function StepConfig({ config, onChange, risks, errors }) {
   const f = k => v => onChange({...config, [k]: v});
   const recommended = computeRecommended(risks);
   const highCount   = risks.filter(r => score(r) >= 10).length;
-
   function toggleAnnex(id) {
-    const next = config.selectedAnnexes.includes(id)
-      ? config.selectedAnnexes.filter(x => x!==id)
-      : [...config.selectedAnnexes, id];
+    const next = config.selectedAnnexes.includes(id) ? config.selectedAnnexes.filter(x => x!==id) : [...config.selectedAnnexes, id];
     onChange({...config, selectedAnnexes: next});
   }
-
   const totalSections = REQUIRED_SECTIONS.length + config.selectedAnnexes.length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-navy">Plan Configuration</h2>
-        <p className="text-gray-500 text-sm mt-1">Choose which sections and annexes to include in the generated plan document.</p>
-      </div>
+    <div>
+      <StepHead phase="Plan configuration" title="Sections and annexes">Choose the annexes to include and confirm who prepared the plan.</StepHead>
+      <div className="stack-lg">
+        {highCount > 0 && recommended.length > 0 && (
+          <Alert tone="note" title="Recommended from the risk assessment">
+            {highCount} hazard{highCount>1?'s':''} scored High or Critical. {recommended.length} annex{recommended.length>1?'es that address them are':' that addresses them is'} preselected and marked Recommended.
+          </Alert>
+        )}
 
-      {/* Smart recommendation banner */}
-      {highCount > 0 && recommended.length > 0 && (
-        <div className="rounded-xl border border-brand/25 bg-brand-light p-4 flex gap-3">
-          <span className="text-xl flex-shrink-0">💡</span>
-          <div>
-            <p className="text-sm font-semibold text-brand-dark">Smart Recommendation</p>
-            <p className="text-sm text-orange-800 mt-0.5">
-              Based on your risk assessment, <strong>{highCount} high/critical risk{highCount>1?'s':''}</strong> were identified.
-              We've pre-selected {recommended.length} annex{recommended.length>1?'es':''} that address those hazards.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Required sections */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Required Sections</div>
-          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full font-semibold">Always included</span>
-        </div>
-        <div className="card divide-y divide-gray-50 overflow-hidden">
-          {REQUIRED_SECTIONS.map((s, i) => (
-            <div key={s.id} className="flex items-start gap-4 px-5 py-4">
-              {/* Lock check */}
-              <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-navy">
-                    <span className="text-gray-400 font-normal mr-1.5">{i+1}.</span>{s.label}
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">Required</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1 leading-relaxed">{s.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Optional annexes */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Optional Annexes</div>
-          <span className="text-xs text-gray-500 font-semibold">{config.selectedAnnexes.length} of {ANNEXES.length} selected</span>
-        </div>
-        <div className="space-y-2">
-          {ANNEXES.map(a => {
-            const isSelected = config.selectedAnnexes.includes(a.id);
-            const isRecommended = recommended.includes(a.id);
-            return (
-              <Checkbox key={a.id} checked={isSelected} onChange={() => toggleAnnex(a.id)}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-base">{a.icon}</span>
-                    <span className={`text-sm font-semibold ${isSelected ? 'text-brand-dark' : 'text-navy'}`}>{a.title}</span>
-                    {isRecommended && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-brand bg-brand-light border border-brand/30 px-2 py-0.5 rounded-full">
-                        ★ Recommended
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">{a.subtitle}</p>
-                </div>
-              </Checkbox>
-            );
-          })}
-        </div>
-        <div className="flex gap-3 mt-3">
-          <button onClick={() => onChange({...config, selectedAnnexes: ANNEXES.map(a=>a.id)})} className="text-xs text-brand font-semibold hover:underline">Select all</button>
-          <span className="text-gray-300">·</span>
-          <button onClick={() => onChange({...config, selectedAnnexes: recommended})} className="text-xs text-brand font-semibold hover:underline">Recommended only</button>
-          <span className="text-gray-300">·</span>
-          <button onClick={() => onChange({...config, selectedAnnexes: []})} className="text-xs text-gray-400 font-semibold hover:underline">Clear all</button>
-        </div>
-      </div>
-
-      {/* Consultant info */}
-      <div>
-        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Consultant Information</div>
-        <div className="card p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Consultant Name" required>
-              <TInput value={config.consultantName} onChange={f('consultantName')} placeholder="Jane Smith"/>
-            </Field>
-            <Field label="Consultant Company">
-              <TInput value={config.consultantCompany} onChange={f('consultantCompany')} placeholder="World Aware"/>
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Plan Version" hint="Increment when plan is revised">
-              <TInput value={config.planVersion} onChange={f('planVersion')} placeholder="1.0"/>
-            </Field>
-            <Field label="Plan Date">
-              <TInput type="date" value={config.planDate} onChange={f('planDate')}/>
-            </Field>
-          </div>
-        </div>
-      </div>
-
-      {/* Plan outline preview */}
-      <div>
-        <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Document Outline Preview</div>
-        <div className="card p-5">
-          <div className="space-y-1 text-sm">
-            <div className="flex items-center gap-2 text-gray-400 text-xs pb-2 border-b border-gray-100 mb-2 font-semibold uppercase tracking-widest">
-              <span>📄</span> {config.consultantCompany || 'World Aware'} — Disaster &amp; Continuity Plan
-            </div>
+        <section>
+          <div className="flex items-center justify-between gap-3 mb-3"><h2 className="section-title" style={{margin:0}}>Required sections</h2><span className="tag plain">Always included</span></div>
+          <ol className="sheet outlist" style={{padding:'4px 16px'}}>
             {REQUIRED_SECTIONS.map((s, i) => (
-              <div key={s.id} className="flex items-center gap-2.5 py-1">
-                <span className="text-green-500 text-xs font-bold">✓</span>
-                <span className="text-gray-400 text-xs w-5 flex-shrink-0">{i+1}.</span>
-                <span className="text-navy font-medium">{s.label}</span>
-              </div>
+              <li key={s.id}><span className="k">{i+1}</span><span><b className="font-medium">{s.label}</b><span className="help" style={{display:'block'}}>{s.desc}</span></span><span/></li>
             ))}
-            {config.selectedAnnexes.length > 0 && (
-              <>
-                <div className="pt-2 pb-1 border-t border-gray-100 mt-1 text-xs font-bold text-gray-400 uppercase tracking-widest">Annexes</div>
-                {config.selectedAnnexes.map((id, i) => {
-                  const a = ANNEXES.find(x => x.id===id); if(!a) return null;
-                  return (
-                    <div key={id} className="flex items-center gap-2.5 py-1">
-                      <span className="text-brand text-xs font-bold">✓</span>
-                      <span className="text-gray-400 text-xs w-5 flex-shrink-0">{String.fromCharCode(65+i)}.</span>
-                      <span className="text-navy font-medium">{a.icon} {a.title}</span>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-            <div className="pt-3 mt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
-              <span>{totalSections} section{totalSections!==1?'s':''} total</span>
-              <span>v{config.planVersion || '1.0'} · {config.planDate || TODAY}</span>
+          </ol>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap"><h2 className="section-title" style={{margin:0}}>Optional annexes</h2><span className="help">{config.selectedAnnexes.length} of {ANNEXES.length} selected</span></div>
+          <div className="grid gap-2">
+            {ANNEXES.map(a => (
+              <Checkbox key={a.id} checked={config.selectedAnnexes.includes(a.id)} onChange={() => toggleAnnex(a.id)}>
+                <span style={{flex:1,minWidth:0}}>
+                  <span className="ttl ttl-ic"><Icon name={a.icon} className="hz-ic"/><span className="tt">{a.title}{recommended.includes(a.id) && <span className="tag">Recommended</span>}</span></span>
+                  <span className="d">{a.subtitle}</span>
+                </span>
+              </Checkbox>
+            ))}
+          </div>
+          <div className="flex gap-4 mt-3 flex-wrap">
+            <button type="button" onClick={() => onChange({...config, selectedAnnexes: ANNEXES.map(a=>a.id)})} className="linkbtn">Select all</button>
+            <button type="button" onClick={() => onChange({...config, selectedAnnexes: recommended})} className="linkbtn">Recommended only</button>
+            <button type="button" onClick={() => onChange({...config, selectedAnnexes: []})} className="linkbtn">Clear all</button>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="section-title">Consultant information</h2>
+          <div className="stack">
+            <div className="fields-2">
+              <Field label="Consultant name" error={errors.consultantName}><TInput value={config.consultantName} onChange={f('consultantName')} placeholder="Henry Mitchell" autoComplete="name"/></Field>
+              <Field label="Consultant company"><TInput value={config.consultantCompany} onChange={f('consultantCompany')} placeholder="World Aware"/></Field>
+            </div>
+            <div className="fields-2">
+              <Field label="Plan version" hint="Increase it each time the plan is revised."><TInput value={config.planVersion} onChange={f('planVersion')} placeholder="1.0"/></Field>
+              <Field label="Plan date"><TInput type="date" value={config.planDate} onChange={f('planDate')}/></Field>
             </div>
           </div>
-        </div>
+        </section>
+
+        <section>
+          <h2 className="section-title">Document outline</h2>
+          <div className="sheet pad">
+            <ol className="outlist">
+              {REQUIRED_SECTIONS.map((s, i) => <li key={s.id}><span className="k">{i+1}</span><span className="nm">{s.label}</span><span/></li>)}
+              {config.selectedAnnexes.map((id, i) => { const a = ANNEXES.find(x => x.id===id); if(!a) return null;
+                return <li key={id}><span className="k">{String.fromCharCode(65+i)}</span><span className="nm"><Icon name={a.icon} size={16} className="hz-ic"/>{a.title}</span><span className="tag plain">Annex</span></li>; })}
+            </ol>
+            <p className="help mt-3 pt-3" style={{borderTop:'1px solid var(--color-border)'}}>{totalSections} section{totalSections!==1?'s':''}. Version {config.planVersion || '1.0'}, {fmtDate(config.planDate || TODAY)}</p>
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
-// ── COMPLETE SCREEN ──────────────────────────────────────────────────────────
-function ReadyScreen({ state, onBack, onRestart, onDashboard }) {
+// ── GENERATE STEP ────────────────────────────────────────────────────────────
+function ReadyScreen({ state, onBack, onDashboard }) {
   const { profile:p, risks, config:c } = state;
   const sorted   = [...risks].sort((a,b) => score(b)-score(a));
   const critN    = sorted.filter(r => score(r)>=15).length;
   const highN    = sorted.filter(r => { const s=score(r); return s>=10&&s<15; }).length;
   const totalSec = REQUIRED_SECTIONS.length + c.selectedAnnexes.length;
   const missingConsultant = !c.consultantName.trim();
-  const [genStatus, setGenStatus] = useState('idle'); // idle | generating | done | error
+  const [genStatus, setGenStatus] = useState('idle');
   const [genError,  setGenError]  = useState('');
+  const fileName = `${safeFileName(p.companyName)}_BCP_v${c.planVersion||'1.0'}_${c.planDate||'today'}.docx`;
 
   async function handleGenerate() {
-    setGenStatus('generating');
-    setGenError('');
-    try {
-      await generateDocument(state);
-      setGenStatus('done');
-    } catch(e) {
-      console.error(e);
-      setGenError(e?.message || 'Unexpected error.');
-      setGenStatus('error');
-    }
+    setGenStatus('generating'); setGenError('');
+    try { await generateDocument(state); setGenStatus('done'); }
+    catch(e) { console.error(e); setGenError(e?.message || 'Unexpected error.'); setGenStatus('error'); }
   }
+  const stats = [
+    { label:'Critical risks', value:critN, sub:'act now', badge: critN>0 ? 15 : null },
+    { label:'High risks',     value:highN, sub:'need a specific plan', badge: highN>0 ? 10 : null },
+    { label:'Critical functions', value:state.functions.length, sub:'recovery priorities' },
+    { label:'Plan sections',  value:totalSec, sub:'in the document' },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-navy text-white px-4 py-4 shadow-lg">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onDashboard} className="w-9 h-9 rounded-lg bg-brand flex items-center justify-center font-black text-lg hover:bg-brand-dark transition-colors" title="Back to Dashboard">W</button>
-            <div><div className="font-bold text-sm">World Aware</div><div className="text-xs text-white/40">Disaster Plan Builder</div></div>
-          </div>
-          <PhaseBar phase={3}/>
+    <div>
+      <StepHead phase="Plan configuration" title="Generate the plan">Everything for <b style={{color:'var(--color-text)'}}>{p.companyName}</b> is collected. Download the Word document, then complete the highlighted fields in Word.</StepHead>
+      <div className="stack-lg">
+        <div className="stats">
+          {stats.map(s => (
+            <div key={s.label} className="sheet stat">
+              <span className="v">{s.value}</span>
+              <span className="l">{s.label}</span>
+              {s.badge ? <span><RiskBadge s={s.badge}/></span> : <span className="s">{s.sub}</span>}
+            </div>
+          ))}
         </div>
-      </header>
-      <main className="flex-1 px-4 py-10">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* Hero */}
-          <div className="card p-8 text-center">
-            <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center text-3xl mx-auto mb-4">📋</div>
-            <h1 className="text-2xl font-bold text-navy mb-2">Plan Ready to Generate</h1>
-            <p className="text-gray-500 text-sm">
-              All intake, risk assessment, and configuration data has been collected for <strong>{p.companyName}</strong>.
-            </p>
+
+        <section>
+          <h2 className="section-title">Document outline</h2>
+          <div className="sheet pad">
+            <ol className="outlist">
+              {REQUIRED_SECTIONS.map((s, i) => <li key={s.id}><span className="k">{i+1}</span><span className="nm">{s.label}</span><span className="tag plain">Required</span></li>)}
+              {c.selectedAnnexes.map((id, i) => { const a = ANNEXES.find(x => x.id===id); if(!a) return null;
+                return <li key={id}><span className="k">{String.fromCharCode(65+i)}</span><span className="nm"><Icon name={a.icon} size={16} className="hz-ic"/>{a.title}</span><span className="tag">Annex</span></li>; })}
+            </ol>
+            <p className="help mt-3 pt-3" style={{borderTop:'1px solid var(--color-border)'}}>Prepared by {c.consultantName||'—'}, {c.consultantCompany||'World Aware'}. Version {c.planVersion||'1.0'}, {fmtDate(c.planDate||TODAY)}</p>
           </div>
+        </section>
 
-          {/* Summary stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label:'Critical Risks', value:critN,  sub:'require immediate action', color:critN>0?'#FEE2E2':'#F3F4F6', text:critN>0?'#991B1B':'#6B7280' },
-              { label:'High Risks',     value:highN,  sub:'require priority attention', color:highN>0?'#FFEDD5':'#F3F4F6', text:highN>0?'#9A3412':'#6B7280' },
-              { label:'Functions',      value:state.functions.length, sub:'critical to operations', color:'#F0F9FF', text:'#0369A1' },
-              { label:'Plan Sections',  value:totalSec, sub:'sections in document',     color:'#F0FDF4', text:'#166534' },
-            ].map(s => (
-              <div key={s.label} className="card p-4 text-center" style={{background:s.color}}>
-                <div className="text-3xl font-black mb-1" style={{color:s.text}}>{s.value}</div>
-                <div className="text-xs font-bold" style={{color:s.text}}>{s.label}</div>
-                <div className="text-[10px] text-gray-400 mt-0.5">{s.sub}</div>
-              </div>
-            ))}
-          </div>
+        {missingConsultant && (
+          <Alert tone="warn" title="Consultant name is missing">Add it on the previous step before generating. <button type="button" onClick={onBack} className="linkbtn">Go back to add it</button></Alert>
+        )}
 
-          {/* Document outline */}
-          <div className="card p-5">
-            <h3 className="font-bold text-navy text-sm mb-4">📄 Document Outline</h3>
-            <div className="space-y-1 text-sm">
-              {REQUIRED_SECTIONS.map((s, i) => (
-                <div key={s.id} className="flex items-center gap-2.5 py-1 border-b border-gray-50">
-                  <span className="text-green-500 text-xs">✓</span>
-                  <span className="text-gray-400 text-xs w-5">{i+1}.</span>
-                  <span className="text-navy font-medium">{s.label}</span>
-                  <span className="ml-auto text-[10px] bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full font-semibold">Required</span>
-                </div>
-              ))}
-              {c.selectedAnnexes.map((id, i) => {
-                const a = ANNEXES.find(x => x.id===id); if(!a) return null;
-                return (
-                  <div key={id} className="flex items-center gap-2.5 py-1 border-b border-gray-50">
-                    <span className="text-brand text-xs">✓</span>
-                    <span className="text-gray-400 text-xs w-5">{String.fromCharCode(65+i)}.</span>
-                    <span className="text-navy font-medium">{a.icon} {a.title}</span>
-                    <span className="ml-auto text-[10px] bg-brand-light text-brand border border-brand/20 px-2 py-0.5 rounded-full font-semibold">Annex</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400 flex justify-between">
-              <span>Prepared by: {c.consultantName||'—'} · {c.consultantCompany||'World Aware'}</span>
-              <span>v{c.planVersion||'1.0'} · {c.planDate||TODAY}</span>
-            </div>
-          </div>
+        <section className="gen" aria-live="polite">
+          {genStatus === 'idle' && <>
+            <h2>Business Continuity Plan, Word document</h2>
+            <p>A {totalSec}-section .docx with the World Aware cover, risk register, IF/THEN procedures and communication templates. Fields to complete are highlighted in amber.</p>
+            <div><button type="button" disabled={missingConsultant} onClick={handleGenerate} className="btn btn-amber btn-lg"><Icon name="file-down"/>Download plan</button></div>
+          </>}
+          {genStatus === 'generating' && <>
+            <div className="flex items-center gap-3"><span className="spinner" aria-hidden="true"/><h2>Building the document</h2></div>
+            <p>Assembling {totalSec} sections and the risk data. This takes a few seconds.</p>
+          </>}
+          {genStatus === 'done' && <>
+            <div className="flex items-center gap-3"><Icon name="circle-check" size={24}/><h2>Plan downloaded</h2></div>
+            <p>Look in your downloads folder for <span className="file">{fileName}</span>. Open it in Word, then select each highlighted [FIELD] and type over it.</p>
+            <div className="flex gap-3 flex-wrap"><button type="button" onClick={handleGenerate} className="btn btn-amber"><Icon name="download"/>Download again</button><button type="button" onClick={onDashboard} className="btn btn-secondary"><Icon name="arrow-left"/>All plans</button></div>
+          </>}
+          {genStatus === 'error' && <>
+            <div className="flex items-center gap-3"><Icon name="circle-alert" size={24}/><h2>The document was not created</h2></div>
+            {genError && <p className="err">{genError}</p>}
+            <p>Check your connection and try again. Your answers are saved.</p>
+            <div><button type="button" onClick={handleGenerate} className="btn btn-amber">Try again</button></div>
+          </>}
+        </section>
 
-          {missingConsultant && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              ⚠️ <strong>Consultant name is missing.</strong> <button onClick={onBack} className="underline font-semibold">Go back to add it</button> before generating.
-            </div>
-          )}
-
-          {/* Generate button */}
-          <div className="card p-6 text-center space-y-4" style={{background:'#0F172A'}}>
-            {genStatus === 'idle' && <>
-              <div className="text-white text-lg font-bold">Ready to Generate</div>
-              <p className="text-white/50 text-sm">Creates a professional Word (.docx) template with all {totalSec} sections, risk table, IF-THEN procedures, and orange placeholders for the consultant to complete in Word.</p>
-              <button
-                disabled={missingConsultant}
-                onClick={handleGenerate}
-                className="btn-primary w-full sm:w-auto"
-                style={{fontSize:'16px', padding:'14px 48px', opacity: missingConsultant ? 0.4 : 1, cursor: missingConsultant ? 'not-allowed' : 'pointer'}}
-              >
-                Generate Plan →
-              </button>
-              {missingConsultant && <p className="text-amber-400 text-xs">Add consultant name above to enable</p>}
-            </>}
-
-            {genStatus === 'generating' && <>
-              <div className="flex justify-center mb-3">
-                <div style={{width:40,height:40,border:'4px solid rgba(255,255,255,.15)',borderTopColor:'#FF6B35',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
-              </div>
-              <div className="text-white text-lg font-bold">Building your document…</div>
-              <p className="text-white/40 text-sm">Assembling {totalSec} sections and populating risk data. This takes a few seconds.</p>
-            </>}
-
-            {genStatus === 'done' && <>
-              <div className="text-4xl mb-2">✅</div>
-              <div className="text-white text-lg font-bold">Document Downloaded!</div>
-              <p className="text-white/50 text-sm">Check your downloads folder for <strong className="text-white/70">{(p.companyName||'Company').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_')}_BCP_v{c.planVersion||'1.0'}_{c.planDate||'today'}.docx</strong></p>
-              <p className="text-white/30 text-xs">Open in Microsoft Word · Orange placeholders indicate fields to complete · Right-click Table of Contents → Update Field to refresh page numbers.</p>
-              <div className="flex gap-3 justify-center flex-wrap pt-2">
-                <button onClick={handleGenerate} className="btn-secondary" style={{padding:'10px 24px'}}>Download Again</button>
-                <button onClick={onDashboard} className="btn-primary" style={{padding:'10px 24px',background:'#374151'}}>← Dashboard</button>
-              </div>
-            </>}
-
-            {genStatus === 'error' && <>
-              <div className="text-4xl mb-2">❌</div>
-              <div className="text-white text-lg font-bold">Generation Failed</div>
-              {genError && <p className="text-red-300 text-xs font-mono bg-black/20 rounded p-2">{genError}</p>}
-              <button onClick={handleGenerate} className="btn-primary" style={{padding:'10px 32px'}}>Try Again</button>
-            </>}
-          </div>
-
-          <div className="flex justify-between flex-wrap gap-3">
-            <button onClick={onBack} className="btn-secondary">← Edit Configuration</button>
-            <div className="flex gap-3">
-              <button onClick={() => { const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); const n=(state.profile.companyName||'Plan').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_'); saveAs(blob, `${n}_plan.json`); }} className="btn-secondary text-sm">📤 Export JSON</button>
-              <button onClick={onDashboard} className="text-sm text-gray-400 hover:text-navy transition-colors font-semibold">← Dashboard</button>
-            </div>
-          </div>
+        <div className="step-nav">
+          <button type="button" onClick={onBack} className="btn btn-ghost"><Icon name="arrow-left"/>Edit configuration</button>
+          <button type="button" onClick={() => { const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); saveAs(blob, `${safeFileName(state.profile.companyName||'Plan')}_plan.json`); }} className="btn btn-secondary"><Icon name="upload"/>Export plan data (JSON)</button>
         </div>
-      </main>
-      <WorldAwareFooter/>
+      </div>
     </div>
   );
 }
 
-// ── ABOUT MODAL ──────────────────────────────────────────────────────────────
+// ── ABOUT ────────────────────────────────────────────────────────────────────
 function AboutModal({ onClose }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); const k = e => e.key==='Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div className="card p-8 max-w-md w-full text-center" onClick={e => e.stopPropagation()}>
-        <div className="w-16 h-16 rounded-2xl bg-brand flex items-center justify-center font-black text-3xl text-white mx-auto mb-4">W</div>
-        <h2 className="text-2xl font-black text-navy mb-1">World Aware</h2>
-        <p className="text-brand font-semibold text-sm mb-4">Disaster Plan Builder</p>
-        <p className="text-gray-500 text-sm leading-relaxed mb-6">
-          A professional tool for emergency preparedness consultants to build customized disaster and business continuity plans for their clients — covering risk assessment, critical functions, and full Word document generation.
-        </p>
-        <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left space-y-2.5 text-sm">
-          <div className="flex justify-between items-center"><span className="text-gray-400">Company</span><span className="font-semibold text-navy">World Aware</span></div>
-          <div className="flex justify-between items-center"><span className="text-gray-400">Website</span><a href="https://beworldaware.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-brand hover:underline">beworldaware.com</a></div>
-          <div className="flex justify-between items-center"><span className="text-gray-400">Version</span><span className="font-semibold text-navy">2.0</span></div>
-          <div className="flex justify-between items-center"><span className="text-gray-400">Phases</span><span className="font-semibold text-navy text-right text-xs">Intake · Risk · Config · Generate</span></div>
-        </div>
-        <button onClick={onClose} className="btn-primary w-full">Close</button>
+    <div className="scrim" onClick={onClose}>
+      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="about-t" onClick={e => e.stopPropagation()}>
+        <img src="assets/wa-lockup-full-color.png" alt="World Aware, Emergency Planning" style={{width:200,marginBottom:20}}/>
+        <h2 id="about-t">Business Continuity Plan Builder</h2>
+        <p className="muted mb-5">Builds a client-ready business continuity plan: company intake, a scored risk assessment, critical functions and a Word document with response procedures for each major hazard.</p>
+        <dl className="dl mb-5">
+          <div><dt>Company</dt><dd>World Aware</dd></div>
+          <div><dt>Website</dt><dd><a href="https://beworldaware.com" target="_blank" rel="noopener noreferrer">beworldaware.com</a></dd></div>
+          <div><dt>Version</dt><dd>2.0</dd></div>
+        </dl>
+        <button ref={ref} type="button" onClick={onClose} className="btn btn-primary w-full">Close</button>
       </div>
     </div>
   );
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function TopBar({ onShowAbout, current }) {
+  return (
+    <header className="topbar">
+      <a href="./" aria-label="World Aware plan builder home"><img className="logo" src="assets/wa-lockup-full-color.png" alt="World Aware, Emergency Planning" width="130" height="30"/></a>
+      <nav aria-label="Main">
+        <a href="./" aria-current={current==='plans'?'page':undefined}>Plans</a>
+        <a href="business-impact.html" aria-current={current==='bia'?'page':undefined}><span className="hidden sm:inline">Business impact</span><span className="sm:hidden">Impact</span></a>
+        {onShowAbout && <button type="button" onClick={onShowAbout}>About</button>}
+      </nav>
+    </header>
+  );
+}
+function planProgress(p) {
+  const risks = p.risks || [];
+  if(p.config?.consultantName && risks.length) return { step:8, label:'Ready to generate' };
+  if(risks.length) return { step:6, label:'Risks rated' };
+  if((p.selectedHazardIds||[]).length) return { step:5, label:'Hazards selected' };
+  if(p.profile?.companyName) return { step:2, label:'Intake started' };
+  return { step:1, label:'Not started' };
+}
 function Dashboard({ plans, onNew, onEdit, onDelete, onShowAbout, onImport }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [importError,   setImportError]   = useState('');
@@ -1807,134 +1668,100 @@ function Dashboard({ plans, onNew, onEdit, onDelete, onShowAbout, onImport }) {
         const data = JSON.parse(ev.target.result);
         if(!data.profile) throw new Error('Invalid plan file');
         const imported = { ...newPlan(), ...data, id: data.id || uid(), updatedAt: new Date().toISOString() };
-        onImport(imported);
-        setImportError('');
-      } catch { setImportError('Invalid file. Please import a valid World Aware plan JSON.'); }
+        onImport(imported); setImportError('');
+      } catch { setImportError('That file is not a World Aware plan. Choose a .json file exported from this tool.'); }
     };
     reader.readAsText(file);
     e.target.value = '';
   }
-
-  function exportAll() {
-    const db = dbLoad();
-    const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
-    saveAs(blob, `WorldAware_AllPlans_${TODAY}.json`);
-  }
-
-  function exportPlan(p) {
-    const blob = new Blob([JSON.stringify(p, null, 2)], {type:'application/json'});
-    const n = (p.profile?.companyName||'Plan').replace(/[^a-zA-Z0-9\s]/g,'').replace(/\s+/g,'_');
-    saveAs(blob, `${n}_plan.json`);
-  }
-
-  function clearAll() {
-    if(!window.confirm('Delete ALL plans permanently? This cannot be undone.')) return;
-    localStorage.removeItem(DB_KEY);
-    window.location.reload();
-  }
-
+  function exportAll() { const blob = new Blob([JSON.stringify(dbLoad(), null, 2)], {type:'application/json'}); saveAs(blob, `WorldAware_AllPlans_${TODAY}.json`); }
+  function exportPlan(p) { const blob = new Blob([JSON.stringify(p, null, 2)], {type:'application/json'}); saveAs(blob, `${safeFileName(p.profile?.companyName||'Plan')}_plan.json`); }
+  function clearAll() { if(!window.confirm('Delete ALL plans permanently? This cannot be undone.')) return; localStorage.removeItem(DB_KEY); window.location.reload(); }
   const sorted = [...plans].sort((a,b) => new Date(b.updatedAt||0) - new Date(a.updatedAt||0));
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-navy text-white px-4 py-4 shadow-lg">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center font-black text-xl">W</div>
-            <div>
-              <div className="font-bold text-base leading-tight">World Aware</div>
-              <div className="text-xs text-white/40 leading-tight">Disaster Plan Builder</div>
-            </div>
-          </div>
-          <button onClick={onShowAbout} className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 px-3 py-1.5 rounded-lg font-semibold transition-all">About</button>
-        </div>
-      </header>
-
-      <main className="flex-1 px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-
-          {/* Title row */}
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-navy">Client Plans</h1>
-              <p className="text-gray-400 text-sm mt-0.5">{plans.length} plan{plans.length!==1?'s':''} saved</p>
-            </div>
-            <button onClick={onNew} className="btn-primary flex items-center gap-2">
-              <span className="text-lg leading-none font-black">+</span> New Plan
-            </button>
+    <div className="app">
+      <TopBar onShowAbout={onShowAbout} current="plans"/>
+      <main className="content flex-1">
+        <div className="wide">
+          <div className="page-head">
+            <div><h1>Client plans</h1><p>{plans.length} plan{plans.length!==1?'s':''} saved in this browser</p></div>
+            <button type="button" onClick={onNew} className="btn btn-primary"><Icon name="plus"/>New plan</button>
           </div>
 
-          {/* Plan cards */}
           {sorted.length === 0 ? (
-            <div className="card p-12 text-center">
-              <div className="text-5xl mb-4">📋</div>
-              <h2 className="text-lg font-bold text-navy mb-2">No plans yet</h2>
-              <p className="text-gray-400 text-sm mb-6">Create your first client disaster plan to get started.</p>
-              <button onClick={onNew} className="btn-primary">+ Create First Plan</button>
+            <div className="empty">
+              <h2>No saved plans yet</h2>
+              <p>Start with the company profile. It takes about ten minutes, and you can stop and come back.</p>
+              <button type="button" onClick={onNew} className="btn btn-primary"><Icon name="plus"/>Start a plan</button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="plans">
               {sorted.map(p => {
-                const critN = (p.risks||[]).filter(r => r.likelihood*r.impact>=15).length;
-                const highN = (p.risks||[]).filter(r => { const s=r.likelihood*r.impact; return s>=10&&s<15; }).length;
-                const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '—';
-                const hasRisks = (p.risks||[]).length > 0;
+                const rs = p.risks || [];
+                const critN = rs.filter(r => r.likelihood*r.impact>=15).length;
+                const highN = rs.filter(r => { const s=r.likelihood*r.impact; return s>=10&&s<15; }).length;
+                const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '—';
+                const prog = planProgress(p);
+                const ann = (p.config?.selectedAnnexes||[]).length;
                 return (
-                  <div key={p.id} className="card p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
-                    <div>
-                      <h3 className="font-bold text-navy text-base leading-tight truncate">{p.profile?.companyName || 'Unnamed Plan'}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5 truncate">{p.profile?.industry || '—'}{p.profile?.employees ? ` · ${p.profile.employees} employees` : ''}</p>
+                  <article key={p.id} className="sheet pad plan-card">
+                    <div className="top">
+                      <div style={{minWidth:0}}>
+                        <h3>{p.profile?.companyName || 'Unnamed plan'}</h3>
+                        <p className="meta">{p.profile?.industry || 'Industry not set'}{p.profile?.employees ? `, ${p.profile.employees} employees` : ''}</p>
+                      </div>
+                      <span className="tag">{prog.label}</span>
                     </div>
-                    <div className="flex gap-2 flex-wrap">
-                      {critN > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">{critN} Critical</span>}
-                      {highN > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{highN} High</span>}
-                      {!hasRisks && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">No risks rated</span>}
-                      {(p.config?.selectedAnnexes||[]).length > 0 && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-light text-brand">{p.config.selectedAnnexes.length} Annex{p.config.selectedAnnexes.length!==1?'es':''}</span>}
+                    <div className="prog" aria-hidden="true"><i style={{width:`${Math.round(prog.step/8*100)}%`}}/></div>
+                    <div className="counts">
+                      {critN > 0 && <span className="flex items-center gap-2"><span className="num">{critN}</span><RiskBadge s={15}/></span>}
+                      {highN > 0 && <span className="flex items-center gap-2"><span className="num">{highN}</span><RiskBadge s={10}/></span>}
+                      {!rs.length && <span className="badge b-none">No risks rated</span>}
+                      {ann > 0 && <span className="tag plain">{ann} annex{ann!==1?'es':''}</span>}
                     </div>
-                    <p className="text-[10px] text-gray-300 mt-auto">Updated {updated}</p>
-                    <div className="flex gap-2 pt-2 border-t border-gray-50 flex-wrap items-center">
-                      <button onClick={() => onEdit(p)} className="btn-primary text-xs" style={{padding:'6px 16px'}}>Edit</button>
-                      <button onClick={() => exportPlan(p)} className="btn-secondary text-xs" style={{padding:'6px 14px'}}>Export</button>
-                      <button onClick={() => setConfirmDelete(p.id)} className="ml-auto text-xs text-gray-300 hover:text-red-400 transition-colors font-semibold">Delete</button>
+                    <p className="meta">Edited {updated}</p>
+                    <div className="acts">
+                      <button type="button" onClick={() => onEdit(p)} className="btn btn-secondary btn-sm"><Icon name="pencil" size={16}/>Continue plan</button>
+                      <button type="button" onClick={() => exportPlan(p)} className="btn btn-ghost btn-sm"><Icon name="upload" size={16}/>Export</button>
+                      <button type="button" onClick={() => setConfirmDelete(p.id)} className="btn btn-ghost btn-sm danger ml-auto" aria-label={`Delete ${p.profile?.companyName || 'plan'}`}><Icon name="trash-2" size={16}/>Delete</button>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>
           )}
 
-          {/* Data management */}
-          <div className="card p-5">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Data Management</div>
+          <section className="mt-8">
+            <h2 className="section-title">Backup and transfer</h2>
+            <p className="help mb-3">Plans are stored in this browser only. Export them to move to another computer or keep a backup.</p>
             <div className="flex flex-wrap gap-3 items-center">
-              <label className="btn-secondary text-sm cursor-pointer" style={{padding:'10px 20px',fontSize:'14px'}}>
-                📥 Import Plan (JSON)
-                <input type="file" accept=".json" onChange={handleImport} className="hidden"/>
+              <label className="btn btn-secondary" style={{cursor:'pointer'}} tabIndex={0} onKeyDown={e => (e.key==='Enter'||e.key===' ') && e.currentTarget.querySelector('input').click()}>
+                <Icon name="download"/>Import plan (JSON)
+                <input type="file" accept=".json" onChange={handleImport} className="sr-only" tabIndex={-1}/>
               </label>
               {plans.length > 0 && <>
-                <button onClick={exportAll} className="btn-secondary text-sm">📤 Export All Plans</button>
-                <button onClick={clearAll} className="text-sm text-gray-300 hover:text-red-400 transition-colors font-semibold px-3 py-2">Clear All</button>
+                <button type="button" onClick={exportAll} className="btn btn-secondary"><Icon name="upload"/>Export all plans</button>
+                <button type="button" onClick={clearAll} className="btn btn-ghost danger">Delete all plans</button>
               </>}
             </div>
-            {importError && <p className="text-red-500 text-xs mt-3 font-medium">{importError}</p>}
-          </div>
-
+            {importError && <p className="errmsg mt-3"><Icon name="circle-alert" size={16}/>{importError}</p>}
+          </section>
         </div>
       </main>
 
       {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="card p-6 max-w-sm w-full">
-            <h3 className="font-bold text-navy text-lg mb-2">Delete Plan?</h3>
-            <p className="text-gray-500 text-sm mb-5">This action cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => { onDelete(confirmDelete); setConfirmDelete(null); }} className="btn-primary" style={{background:'#DC2626'}}>Delete</button>
-              <button onClick={() => setConfirmDelete(null)} className="btn-secondary">Cancel</button>
+        <div className="scrim">
+          <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="del-t">
+            <h2 id="del-t">Delete this plan?</h2>
+            <p className="muted mb-5">This removes it from this browser and cannot be undone. Export it first if you may need it.</p>
+            <div className="flex gap-3 flex-wrap">
+              <button type="button" onClick={() => { onDelete(confirmDelete); setConfirmDelete(null); }} className="btn btn-danger"><Icon name="trash-2"/>Delete plan</button>
+              <button type="button" autoFocus onClick={() => setConfirmDelete(null)} className="btn btn-secondary">Cancel</button>
             </div>
           </div>
         </div>
       )}
-
       <WorldAwareFooter/>
     </div>
   );
@@ -1952,172 +1779,131 @@ function App() {
   const [ready,      setReady]      = useState(false);
   const [errors,     setErrors]     = useState({});
   const [saveStatus, setSaveStatus] = useState(null);
+  const mainRef = useRef(null);
 
+  function top() { window.scrollTo({top:0,behavior:'smooth'}); setTimeout(() => mainRef.current?.focus({preventScroll:true}), 0); }
   function refreshPlans() { setPlans(dbLoad().plans); }
-
-  function startWizard(p) {
-    setPlan({...p});
-    setPhase(1); setP1step(0); setP2step(0); setReady(false); setErrors({});
-    setScreen('wizard');
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-
-  function goToDashboard() {
-    refreshPlans(); setScreen('dashboard'); setReady(false);
-    window.scrollTo({top:0,behavior:'smooth'});
-  }
-
+  function startWizard(p) { setPlan({...p}); setPhase(1); setP1step(0); setP2step(0); setReady(false); setErrors({}); setScreen('wizard'); window.scrollTo({top:0,behavior:'smooth'}); }
+  function goToDashboard() { refreshPlans(); setScreen('dashboard'); setReady(false); window.scrollTo({top:0,behavior:'smooth'}); }
   function doSave(s = plan) {
     const updated = {...s, updatedAt: new Date().toISOString()};
-    setPlan(updated);
-    dbSavePlan(updated);
-    refreshPlans();
-    setSaveStatus('saved');
-    setTimeout(() => setSaveStatus(null), 2500);
+    setPlan(updated); dbSavePlan(updated); refreshPlans();
+    setSaveStatus('saved'); setTimeout(() => setSaveStatus(null), 2500);
     return updated;
   }
-
   function update(key, val) { const next = {...plan, [key]: val}; setPlan(next); return next; }
 
   function validateP1() {
     if(p1step === 0) {
       const e = {};
-      if(!plan.profile.companyName.trim()) e.companyName = 'Company name is required.';
-      if(!plan.profile.industry)           e.industry    = 'Please select an industry.';
-      if(!plan.profile.employees)          e.employees   = 'Please select employee count.';
-      if(!plan.profile.locations)          e.locations   = 'Please select number of locations.';
+      if(!plan.profile.companyName.trim()) e.companyName = 'Enter the company name.';
+      if(!plan.profile.industry)           e.industry    = 'Choose an industry.';
+      if(!plan.profile.employees)          e.employees   = 'Choose an employee range.';
+      if(!plan.profile.locations)          e.locations   = 'Choose the number of locations.';
       setErrors(e); return Object.keys(e).length === 0;
     }
     if(p1step === 1) {
       const e = {};
       if(plan.functions.length === 0) { e._general = 'Add at least one critical function.'; setErrors(e); return false; }
-      plan.functions.forEach((fn, i) => { if(!fn.name.trim()) { if(!e[i]) e[i]={}; e[i].name = 'Function name is required.'; } });
+      plan.functions.forEach((fn, i) => { if(!fn.name.trim()) { if(!e[i]) e[i]={}; e[i].name = 'Name this function, or remove it.'; } });
       setErrors(e); return Object.keys(e).length === 0;
     }
     setErrors({}); return true;
   }
-
   function validateP3() {
-    if(!plan.config.consultantName.trim()) { setErrors({ consultantName: 'Consultant name is required.' }); return false; }
+    if(!plan.config.consultantName.trim()) { setErrors({ consultantName: 'Enter the consultant name. It appears on the cover.' }); return false; }
     setErrors({}); return true;
   }
-
   function p1Next() {
     if(!validateP1()) return;
-    if(p1step < 3) { setP1step(p1step + 1); window.scrollTo({top:0,behavior:'smooth'}); }
-    else { doSave(); setPhase(2); setP2step(0); window.scrollTo({top:0,behavior:'smooth'}); }
+    if(p1step < 3) { setP1step(p1step + 1); top(); }
+    else { doSave(); setPhase(2); setP2step(0); top(); }
   }
-  function p1Prev() { setErrors({}); if(p1step > 0) setP1step(p1step - 1); }
-
+  function p1Prev() { setErrors({}); if(p1step > 0) { setP1step(p1step - 1); top(); } }
   function p2Next() {
     if(p2step === 0) {
       if(plan.selectedHazardIds.length === 0) { setErrors({hazards:'Select at least one hazard.'}); return; }
-      setErrors({}); setP2step(1); window.scrollTo({top:0,behavior:'smooth'});
+      setErrors({}); setP2step(1); top();
     } else {
       const rec = computeRecommended(plan.risks);
       const cfg = plan.config.selectedAnnexes.length === 0 ? {...plan.config, selectedAnnexes: rec} : plan.config;
       const next = {...plan, config: cfg};
       setPlan(next); doSave(next);
-      setPhase(3); window.scrollTo({top:0,behavior:'smooth'});
+      setPhase(3); top();
     }
   }
   function p2Prev() {
-    if(p2step > 0) { setP2step(0); window.scrollTo({top:0,behavior:'smooth'}); }
-    else           { setPhase(1); setP1step(3); window.scrollTo({top:0,behavior:'smooth'}); }
+    if(p2step > 0) { setP2step(0); top(); }
+    else           { setPhase(1); setP1step(3); top(); }
+  }
+  function p3Finish() { if(!validateP3()) return; doSave(); setReady(true); top(); }
+  // Rail navigation: only back to steps already done.
+  function goStep(i) {
+    setErrors({}); setReady(false);
+    if(i <= 3) { setPhase(1); setP1step(i); }
+    else if(i <= 5) { setPhase(2); setP2step(i-4); }
+    else { setPhase(3); }
+    top();
   }
 
-  function p3Finish() {
-    if(!validateP3()) return;
-    doSave(); setReady(true); window.scrollTo({top:0,behavior:'smooth'});
-  }
-
-  // Dashboard
   if(screen === 'dashboard') return (
     <>
-      <Dashboard
-        plans={plans}
-        onNew={() => startWizard(newPlan())}
-        onEdit={p => startWizard(p)}
-        onDelete={id => { dbDeletePlan(id); refreshPlans(); }}
-        onShowAbout={() => setShowAbout(true)}
-        onImport={imported => { dbSavePlan(imported); refreshPlans(); }}
-      />
+      <Dashboard plans={plans} onNew={() => startWizard(newPlan())} onEdit={p => startWizard(p)}
+        onDelete={id => { dbDeletePlan(id); refreshPlans(); }} onShowAbout={() => setShowAbout(true)}
+        onImport={imported => { dbSavePlan(imported); refreshPlans(); }}/>
       {showAbout && <AboutModal onClose={() => setShowAbout(false)}/>}
     </>
   );
 
-  // Ready screen
-  if(ready) return (
-    <ReadyScreen
-      state={plan}
-      onBack={() => { setReady(false); window.scrollTo({top:0,behavior:'smooth'}); }}
-      onDashboard={goToDashboard}
-      onRestart={() => startWizard(newPlan())}
-    />
-  );
-
-  // Wizard
-  const allHazards  = [...HAZARD_LIST, ...plan.customHazards].filter(h => plan.selectedHazardIds.includes(h.id));
-  const stepLabel   = phase===1 ? `Phase 1: ${P1_LABELS[p1step]}` : phase===2 ? `Phase 2: ${p2step===0?'Select Hazards':'Risk Matrix'}` : 'Phase 3: Plan Configuration';
-  const stepTotal   = phase===1 ? 4 : phase===2 ? 2 : 1;
-  const stepCurrent = phase===1 ? p1step : phase===2 ? p2step : 0;
+  const allHazards = [...HAZARD_LIST, ...plan.customHazards].filter(h => plan.selectedHazardIds.includes(h.id));
+  const cur = stepIndex(phase, p1step, p2step, ready);
+  const backLabel = phase===1 ? (p1step===0 ? null : 'Back') : phase===2 && p2step===0 ? 'Back to review' : phase===3 ? 'Back to matrix' : 'Back';
+  const nextLabel = phase===1&&p1step===3 ? 'Continue to risk assessment' : phase===2&&p2step===1 ? 'Continue to plan configuration' : phase===3 ? 'Review and generate' : 'Continue';
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-navy text-white px-4 py-4 shadow-lg sticky top-0 z-30">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={goToDashboard} className="w-9 h-9 rounded-lg bg-brand flex items-center justify-center font-black text-lg hover:bg-brand-dark transition-colors" title="Back to Dashboard">W</button>
-            <div>
-              <div className="font-bold text-sm leading-tight">World Aware</div>
-              <div className="text-xs text-white/40 leading-tight">{plan?.profile?.companyName || 'Disaster Plan Builder'}</div>
+    <div className="app">
+      <div className="frame has-rail">
+        <aside className="rail" aria-label="Plan steps">
+          <a className="logo-link" href="./" onClick={e => { e.preventDefault(); goToDashboard(); }} aria-label="All plans"><img src="assets/wa-lockup-full-color.png" alt="World Aware, Emergency Planning" width="170" height="39"/></a>
+          <button type="button" className="rail-back" onClick={goToDashboard}><Icon name="arrow-left" size={16}/>All plans</button>
+          <div className="rail-client"><div className="k">Client</div><div className="v">{plan?.profile?.companyName || 'New plan'}</div></div>
+          <StepRail current={cur} plan={plan} onGo={goStep}/>
+          <div className="rail-foot">
+            <button type="button" onClick={() => doSave()} className="btn btn-secondary btn-sm"><Icon name="save" size={16}/>Save progress</button>
+            <span className="save-note" aria-live="polite">{saveStatus==='saved' && <><Icon name="check" size={16}/>Saved</>}</span>
+          </div>
+        </aside>
+        <div style={{minWidth:0, display:'flex', flexDirection:'column'}}>
+          <header className="mhead">
+            <a href="./" onClick={e => { e.preventDefault(); goToDashboard(); }} aria-label="All plans"><img className="logo" src="assets/wa-lockup-full-color.png" alt="World Aware, Emergency Planning" width="130" height="30"/></a>
+            <div className="mhead-r">
+              <span className="save-note" aria-live="polite">{saveStatus==='saved' && <Icon name="check" size={16}/>}<span className="sr-only">{saveStatus==='saved'?'Saved':''}</span></span>
+              <button type="button" onClick={() => doSave()} className="btn btn-ghost btn-sm"><Icon name="save" size={16}/>Save</button>
             </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <PhaseBar phase={phase}/>
-            {saveStatus==='saved' && <span className="saved-badge hidden sm:inline-flex">✓ Saved</span>}
-            <button onClick={() => doSave()} className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap">Save</button>
-          </div>
-        </div>
-      </header>
+          </header>
+          <main className="content flex-1" ref={mainRef} tabIndex={-1} style={{outline:'none'}}>
+            <div className="column">
+              <MobileStep current={cur}/>
+              {ready ? (
+                <ReadyScreen state={plan} onBack={() => { setReady(false); top(); }} onDashboard={goToDashboard}/>
+              ) : <>
+                {phase===1 && p1step===0 && <StepProfile data={plan.profile} onChange={d => update('profile',{...plan.profile,...d})} errors={errors}/>}
+                {phase===1 && p1step===1 && <StepFunctions data={plan.functions} onChange={v => update('functions',v)} errors={errors}/>}
+                {phase===1 && p1step===2 && <StepPreparedness data={plan.preparedness} onChange={d => update('preparedness',{...plan.preparedness,...d})}/>}
+                {phase===1 && p1step===3 && <P1Review state={plan}/>}
+                {phase===2 && p2step===0 && <StepHazards selected={plan.selectedHazardIds} onChange={v => { update('selectedHazardIds',v); if(errors.hazards) setErrors({}); }} custom={plan.customHazards} onCustom={v => update('customHazards',v)} error={errors.hazards}/>}
+                {phase===2 && p2step===1 && <RiskMatrix risks={plan.risks} onChange={v => { const n=update('risks',v); doSave(n); }} allHazards={allHazards}/>}
+                {phase===3 && <StepConfig config={plan.config} onChange={v => update('config',v)} risks={plan.risks} errors={errors}/>}
 
-      <div className="bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-          <div className="text-xs font-semibold text-gray-400">{stepLabel}</div>
-          <StepDots total={stepTotal} current={stepCurrent}/>
+                <div className="step-nav">
+                  {backLabel ? <button type="button" onClick={phase===1?p1Prev:phase===2?p2Prev:()=>{setPhase(2);setP2step(1);top();}} className="btn btn-ghost"><Icon name="arrow-left"/>{backLabel}</button> : <span/>}
+                  <button type="button" onClick={phase===1?p1Next:phase===2?p2Next:p3Finish} className="btn btn-primary">{nextLabel}</button>
+                </div>
+              </>}
+            </div>
+          </main>
         </div>
       </div>
-
-      <main className="flex-1 px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="card p-6 sm:p-8">
-            {phase===1 && p1step===0 && <StepProfile data={plan.profile} onChange={d => update('profile',{...plan.profile,...d})} errors={errors}/>}
-            {phase===1 && p1step===1 && <StepFunctions data={plan.functions} onChange={v => update('functions',v)} errors={errors}/>}
-            {phase===1 && p1step===2 && <StepPreparedness data={plan.preparedness} onChange={d => update('preparedness',{...plan.preparedness,...d})}/>}
-            {phase===1 && p1step===3 && <P1Review state={plan}/>}
-            {phase===2 && p2step===0 && <StepHazards selected={plan.selectedHazardIds} onChange={v => update('selectedHazardIds',v)} custom={plan.customHazards} onCustom={v => update('customHazards',v)}/>}
-            {phase===2 && p2step===1 && <RiskMatrix risks={plan.risks} onChange={v => { const n=update('risks',v); doSave(n); }} allHazards={allHazards}/>}
-            {phase===3 && <StepConfig config={plan.config} onChange={v => update('config',v)} risks={plan.risks}/>}
-          </div>
-
-          <div className="flex items-center justify-between mt-6">
-            <button onClick={phase===1?p1Prev:phase===2?p2Prev:()=>{setPhase(2);setP2step(1);window.scrollTo({top:0,behavior:'smooth'});}} className="btn-secondary">
-              ← {phase===2&&p2step===0?'Back to Review':phase===3?'Back to Matrix':'Previous'}
-            </button>
-            <button
-              onClick={phase===1?p1Next:phase===2?p2Next:p3Finish}
-              disabled={phase===2&&p2step===0&&plan.selectedHazardIds.length===0}
-              className="btn-primary"
-            >
-              {phase===1&&p1step===3 ? 'Continue to Risk Assessment →' :
-               phase===2&&p2step===1 ? 'Continue to Plan Config →' :
-               phase===3             ? 'Review & Generate Plan →' : 'Next →'}
-            </button>
-          </div>
-
-          {errors.hazards && <p className="error-msg text-center mt-2">{errors.hazards}</p>}
-        </div>
-      </main>
       <WorldAwareFooter/>
     </div>
   );
