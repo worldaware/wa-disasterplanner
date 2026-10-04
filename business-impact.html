@@ -3,196 +3,149 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Business Impact Assessment — World Aware</title>
+<title>Business Impact Assessment | World Aware</title>
+<meta name="theme-color" content="#4D0000">
+<link rel="icon" type="image/png" href="assets/wa-mark-full-color.png">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/brand.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400;500&display=swap');
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --orange:#E8650A;--navy:#1A1A2E;--navy2:#252545;
-  --green:#1D9E75;--green-light:#E1F5EE;--green-dark:#085041;
-  --amber:#EF9F27;--amber-light:#FAEEDA;--amber-dark:#633806;
-  --red:#E24B4A;--red-light:#FCEBEB;--red-dark:#A32D2D;
-  --crit-light:#F7C1C1;--crit-dark:#501313;
-  --text:#1A1A2E;--text2:#4a4a6a;--text3:#8888a8;
-  --bg:#f4f4f8;--surface:#fff;
-  --border:rgba(26,26,46,.09);--border2:rgba(26,26,46,.18);
-  --r:12px;--rsm:8px;
-}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-
-/* Header */
-.header{background:var(--navy);padding:0 20px;display:flex;align-items:center;justify-content:space-between;min-height:54px}
-.logo{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;letter-spacing:.14em;color:var(--orange)}
-.header-right{font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.06em}
-
-/* Container */
-.container{max-width:680px;margin:0 auto;padding:24px 16px 60px}
-
-/* Screen management */
-.screen{display:none}.screen.active{display:block}
-
-/* ── HAZARD PICKER ── */
-.intro{background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--r);border-left:3px solid var(--orange);padding:20px;margin-bottom:20px}
-.intro h1{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:6px}
-.intro p{font-size:13px;color:var(--text2);line-height:1.65}
-.intro-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.intro-tag{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);background:var(--bg);padding:4px 10px;border-radius:20px;border:0.5px solid var(--border2)}
-
-.cat-label{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);font-family:'DM Mono',monospace;margin:20px 0 8px}
-.cat-label:first-of-type{margin-top:0}
-.hazard-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
-@media(max-width:480px){.hazard-grid{grid-template-columns:1fr}}
-.hazard-btn{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface);border:1.5px solid var(--border2);border-radius:var(--rsm);cursor:pointer;text-align:left;transition:all .15s;font-family:'DM Sans',sans-serif}
-.hazard-btn:hover{border-color:var(--orange);background:#fef5f0}
-.hazard-btn .h-icon{font-size:20px;flex-shrink:0}
-.hazard-btn .h-name{font-size:14px;font-weight:500;color:var(--navy)}
-.hazard-btn .h-cat{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px}
-
-/* ── ASSESSMENT SCREEN ── */
-.assessment-header{background:var(--navy2);border-radius:var(--r);padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px}
-.assessment-icon{font-size:28px;flex-shrink:0}
-.assessment-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:#fff}
-.assessment-sub{font-size:11px;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace;margin-top:3px}
-.back-btn{margin-left:auto;font-size:12px;color:rgba(255,255,255,.4);background:rgba(255,255,255,.08);border:0.5px solid rgba(255,255,255,.15);border-radius:6px;padding:6px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
-.back-btn:hover{color:#fff;background:rgba(255,255,255,.15)}
-
-/* Progress */
-.progress-wrap{margin-bottom:16px}
-.progress-track{height:2px;background:var(--border2);border-radius:2px;overflow:hidden}
-.progress-fill{height:100%;background:var(--orange);border-radius:2px;transition:width .4s ease}
-.progress-meta{display:flex;justify-content:space-between;margin-top:6px}
-.progress-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3)}
-
-/* Question cards */
-.q-card{background:var(--surface);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;margin-bottom:8px;border-left:2.5px solid var(--orange);animation:slideUp .2s ease}
-.q-card.answered-yes{border-left-color:var(--green);opacity:.72}
-.q-card.answered-no{border-left-color:var(--border2);opacity:.65}
-.q-card.answered-na{border-left-color:var(--border2);opacity:.55}
-@keyframes slideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-
-.q-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
-.q-weight{font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);background:var(--bg);border:0.5px solid var(--border2);border-radius:4px;padding:3px 7px;flex-shrink:0}
-.q-weight.high{color:var(--orange);border-color:rgba(232,101,10,.3);background:rgba(232,101,10,.06)}
-.q-text{font-size:15px;font-weight:500;color:var(--navy);line-height:1.4;margin-bottom:6px}
-
-.q-detail-btn{font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:3px;margin-bottom:8px;transition:color .15s}
-.q-detail-btn:hover{color:var(--navy)}
-.q-detail-btn .arr{transition:transform .2s;display:inline-block}
-.q-detail-btn.open .arr{transform:rotate(90deg)}
-.q-detail{font-size:13px;color:var(--text2);line-height:1.6;background:var(--bg);border-left:2px solid var(--border2);padding:10px 12px;border-radius:0 6px 6px 0;margin-bottom:10px;display:none}
-.q-detail.open{display:block;animation:fadeIn .18s ease}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-
-.btn-row{display:flex;gap:8px}
-.btn{flex:1;padding:9px 0;border-radius:var(--rsm);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--surface);color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif}
-.btn:hover{background:var(--bg);color:var(--navy)}
-.btn.yes.sel{background:var(--green-light);border-color:var(--green);color:var(--green-dark)}
-.btn.no.sel{background:#fef5f0;border-color:#D85A30;color:#712B13}
-.btn.na{flex:.55;font-size:11px;font-family:'DM Mono',monospace;color:var(--text3)}
-.btn.na.sel{background:var(--bg);border-color:var(--border2);color:var(--text2)}
-.connector{text-align:center;color:var(--text3);font-size:16px;margin:3px 0}
-
-/* Score panel */
-.score-panel{background:var(--surface);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;margin:14px 0 8px}
-.score-panel-label{font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:10px}
-.pips{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
-.pip{width:20px;height:20px;border-radius:50%;border:1px solid var(--border2);background:var(--bg);transition:all .25s}
-.pip.active{background:var(--green);border-color:var(--green-dark)}
-.pip.active.warn{background:var(--amber);border-color:var(--amber-dark)}
-.pip.active.danger{background:var(--red);border-color:var(--red-dark)}
-.pip.active.crit{background:var(--red-dark);border-color:#3b0f0f}
-.pip-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);margin-left:6px}
-
-/* Result */
-.result-card{border-radius:10px;padding:20px;margin-top:6px;animation:slideUp .3s ease}
-.result-card.low{background:var(--green-light);border:1px solid var(--green)}
-.result-card.medium{background:var(--amber-light);border:1px solid var(--amber)}
-.result-card.high{background:var(--red-light);border:1px solid var(--red)}
-.result-card.critical{background:var(--crit-light);border:1px solid var(--red-dark)}
-.result-eyebrow{font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;display:block}
-.result-card.low .result-eyebrow{color:var(--green-dark)}
-.result-card.medium .result-eyebrow{color:var(--amber-dark)}
-.result-card.high .result-eyebrow{color:var(--red-dark)}
-.result-card.critical .result-eyebrow{color:var(--crit-dark)}
-.result-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px}
-.result-body{font-size:14px;line-height:1.7;color:var(--text2)}
-.result-flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.flag{font-size:11px;padding:4px 10px;border-radius:20px;font-family:'DM Mono',monospace}
-.flag.red{background:rgba(162,45,45,.1);color:var(--red-dark);border:0.5px solid rgba(162,45,45,.3)}
-.flag.amber{background:rgba(239,159,39,.12);color:var(--amber-dark);border:0.5px solid rgba(239,159,39,.4)}
-.result-coop{margin-top:14px;padding-top:12px;border-top:0.5px solid rgba(26,26,46,.1);font-size:13px;color:var(--text2);line-height:1.65}
-.result-coop a{color:var(--orange);text-decoration:none;font-weight:500}
-.result-coop a:hover{text-decoration:underline}
-
-/* Restart */
-.restart-wrap{text-align:center;margin-top:24px}
-.restart-btn{font-size:13px;color:var(--text3);background:none;border:0.5px solid var(--border2);border-radius:20px;padding:8px 20px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
-.restart-btn:hover{color:var(--navy);border-color:var(--navy)}
-
-/* Footer */
-.footer{text-align:center;margin-top:48px;font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);letter-spacing:.05em}
-.footer a{color:var(--orange);text-decoration:none}
+/* Business impact page: layout specific to this screen. Components come from css/brand.css. */
+.container { max-width: var(--content-max); margin: 0 auto; }
+.screen { display: none; } .screen.active { display: block; }
+.intro { display: grid; gap: var(--space-3); margin-bottom: var(--space-6); }
+.intro h1 { font-size: var(--text-2xl); letter-spacing: var(--tracking-display); }
+.intro p { color: var(--color-text-muted); max-width: var(--measure); }
+.facts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+@media (min-width: 1024px) { .intro h1 { font-size: var(--text-3xl); } }
+.cat-block + .cat-block { margin-top: var(--space-5); }
+.hz-pick { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: center; width: 100%; text-align: left; min-height: 56px; padding: var(--space-3) var(--space-4); border: var(--border-control) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); cursor: pointer; }
+.hz-pick:hover { border-color: var(--wa-maroon); background: var(--maroon-50); }
+.hz-pick .hz-ic { color: var(--wa-maroon); }
+.hz-pick .nm { font-weight: var(--weight-medium); }
+.hz-pick .go { color: var(--color-text-muted); }
+.a-head { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3) var(--space-4); align-items: center; margin-bottom: var(--space-5); }
+.a-ic { width: 48px; height: 48px; border-radius: var(--radius-sm); background: var(--wa-cream); color: var(--wa-maroon); display: grid; place-items: center; }
+.a-head h1 { font-size: var(--text-xl); }
+.a-head p { color: var(--color-text-muted); font-size: var(--text-sm); }
+.a-head .btn { grid-column: 1 / -1; justify-self: start; }
+@media (min-width: 640px) { .a-head { grid-template-columns: auto 1fr auto; } .a-head .btn { grid-column: auto; } }
+.progress { margin-bottom: var(--space-5); display: grid; gap: var(--space-2); }
+.progress-track { height: 6px; background: var(--stone-100); border-radius: var(--radius-pill); overflow: hidden; }
+.progress-fill { height: 100%; background: var(--wa-maroon); border-radius: var(--radius-pill); transition: width var(--dur-base) var(--ease); }
+.progress-meta { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-text-muted); flex-wrap: wrap; }
+.progress-meta b { color: var(--color-text); font-family: var(--font-display); }
+.q-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); counter-reset: q; }
+.q-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); display: grid; gap: var(--space-3); }
+@media (min-width: 640px) { .q-card { padding: var(--space-5); } }
+.q-card.answered { background: var(--color-surface-sunk); }
+.q-top { display: grid; grid-template-columns: 32px 1fr; gap: var(--space-3); align-items: start; }
+.q-n { width: 32px; height: 32px; border-radius: var(--radius-pill); border: 2px solid var(--wa-maroon); color: var(--wa-maroon); display: grid; place-items: center; font: var(--weight-bold) var(--text-sm)/1 var(--font-display); }
+.q-card.answered .q-n { background: var(--wa-maroon); color: var(--wa-cream); }
+.q-text { font-weight: var(--weight-medium); line-height: 1.45; }
+.q-meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: center; padding-left: 44px; }
+.q-weight { font-size: var(--text-sm); color: var(--color-text-muted); }
+.q-weight b { font-family: var(--font-display); color: var(--color-text); }
+.q-detail-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--space-2); margin-left: calc(-1 * var(--space-2)); background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer; color: var(--color-text-link); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.q-detail-btn:hover { background: var(--maroon-50); }
+.q-detail-btn .wa-ic { transition: transform var(--dur-base) var(--ease); }
+.q-detail-btn[aria-expanded="true"] .wa-ic { transform: rotate(180deg); }
+.q-detail { display: none; margin-left: 44px; font-size: var(--text-sm); line-height: 1.6; background: var(--color-surface-warm); border-left: var(--border-rule) solid var(--wa-amber); padding: var(--space-3) var(--space-4); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; max-width: var(--measure); }
+.q-detail.open { display: block; }
+.q-answer { padding-left: 44px; }
+.q-answer .seg { grid-auto-columns: minmax(72px, 1fr); }
+@media (max-width: 479px) { .q-meta, .q-answer { padding-left: 0; } .q-detail { margin-left: 0; } .q-answer .seg { width: 100%; } }
+.score-panel { margin-top: var(--space-5); }
+.score-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.score-head .big { font: var(--weight-bold) var(--text-2xl)/1 var(--font-display); }
+.score-head .big small { font-size: var(--text-md); color: var(--color-text-muted); font-weight: var(--weight-medium); }
+.pips { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }
+.pip { height: 10px; border-radius: var(--radius-xs); background: var(--stone-100); }
+.pip.active.b-low { background: var(--risk-low); } .pip.active.b-mod { background: var(--risk-moderate); }
+.pip.active.b-high { background: var(--risk-high); } .pip.active.b-crit { background: var(--risk-critical); }
+.result-card { margin-top: var(--space-4); padding: var(--space-5); border-radius: var(--radius-md); border: 1px solid var(--color-border); border-left: 6px solid; display: grid; gap: var(--space-3); }
+.result-card.low { background: var(--risk-low-tint); border-left-color: var(--risk-low); }
+.result-card.medium { background: var(--risk-moderate-tint); border-left-color: var(--risk-moderate); }
+.result-card.high { background: var(--risk-high-tint); border-left-color: var(--risk-high); }
+.result-card.critical { background: var(--risk-critical-tint); border-left-color: var(--risk-critical); }
+.result-top { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; }
+.result-title { font-size: var(--text-xl); }
+.result-body { max-width: var(--measure); }
+.flags h3 { font-family: var(--font-body); font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text); margin-bottom: var(--space-2); }
+.flag-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.flag-list li { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-2); align-items: center; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
+.flag-list li .wa-ic { color: var(--color-warning); }
+.flag-list li.hi .wa-ic { color: var(--color-danger); }
+.flag-list .w { color: var(--color-text-muted); white-space: nowrap; }
+.result-coop { border-top: 1px solid rgba(53, 3, 2, .12); padding-top: var(--space-4); display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+.restart-wrap { margin-top: var(--space-6); }
 </style>
 </head>
 <body>
+<div class="app">
+<header class="topbar">
+  <a href="./" aria-label="World Aware plan builder"><img class="logo" src="assets/wa-lockup-full-color.png" alt="World Aware, Emergency Planning" width="130" height="30"></a>
+  <nav aria-label="Main">
+    <a href="./">Plans</a>
+    <a href="business-impact.html" aria-current="page"><span class="bi-long">Business impact</span></a>
+  </nav>
+</header>
 
-<div class="header">
-  <span class="logo">WORLD AWARE</span>
-  <span class="header-right">beworldaware.com</span>
-</div>
-
+<main class="content" style="flex:1" id="main" tabindex="-1">
 <!-- ── SCREEN 1: HAZARD PICKER ── -->
 <div id="screen-pick" class="screen active">
   <div class="container">
-    <div class="intro">
-      <h1>Business Impact Assessment</h1>
-      <p>Select the hazard you are assessing. You will be asked 6 targeted questions about how that specific hazard affects your organization — tied directly to your Business Continuity Plan priorities.</p>
-      <div class="intro-tags">
-        <span class="intro-tag">For: Owners · Ops · Safety · HR · Facilities</span>
-        <span class="intro-tag">6 questions per hazard</span>
-        <span class="intro-tag">Pairs with COOP/BCP Generator</span>
+    <header class="intro">
+      <h1>Business impact assessment</h1>
+      <p>Select the hazard you are assessing. You will answer six targeted questions about how that hazard affects your organization. The result ties directly to your Business Continuity Plan priorities.</p>
+      <div class="facts">
+        <span class="tag">For owners, operations, safety, HR and facilities</span>
+        <span class="tag">6 questions per hazard</span>
+        <span class="tag">Pairs with the COOP/BCP Generator</span>
       </div>
-    </div>
+    </header>
     <div id="hazard-list"></div>
-    <div class="footer" style="margin-top:32px">
-      Emergency Preparedness for Everyone &nbsp;·&nbsp; <a href="https://beworldaware.com">beworldaware.com</a>
-    </div>
   </div>
 </div>
 
 <!-- ── SCREEN 2: ASSESSMENT ── -->
 <div id="screen-assess" class="screen">
   <div class="container">
-    <div class="assessment-header" id="assess-header">
-      <span class="assessment-icon" id="assess-icon"></span>
+    <div class="a-head">
+      <span class="a-ic" id="assess-icon"></span>
       <div>
-        <div class="assessment-title" id="assess-title"></div>
-        <div class="assessment-sub" id="assess-sub"></div>
+        <h1 id="assess-title"></h1>
+        <p id="assess-sub"></p>
       </div>
-      <button class="back-btn" onclick="goBack()">← Change hazard</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="goBack()"><span data-ic="arrow-left"></span>Change hazard</button>
     </div>
 
-    <div class="progress-wrap">
-      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="progress">
+      <div class="progress-track" role="progressbar" aria-label="Questions answered" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0" id="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
       <div class="progress-meta">
-        <span class="progress-label" id="progress-label">0 of 6 questions answered</span>
-        <span class="progress-label" id="score-running" style="display:none"></span>
+        <span id="progress-label">0 of 6 questions answered</span>
+        <span id="score-running" style="display:none"></span>
       </div>
     </div>
 
-    <div id="questions-wrap"></div>
-    <div id="score-panel" class="score-panel" style="display:none"></div>
-    <div id="result-wrap"></div>
+    <ol class="q-list" id="questions-wrap"></ol>
+    <section id="score-panel" class="sheet pad score-panel" style="display:none" aria-live="polite"></section>
+    <div id="result-wrap" aria-live="polite"></div>
 
     <div class="restart-wrap">
-      <button class="restart-btn" onclick="goBack()">← Assess a different hazard</button>
-    </div>
-    <div class="footer">
-      Emergency Preparedness for Everyone &nbsp;·&nbsp; <a href="https://beworldaware.com">beworldaware.com</a>
+      <button type="button" class="btn btn-secondary" onclick="goBack()"><span data-ic="arrow-left"></span>Assess a different hazard</button>
     </div>
   </div>
 </div>
+</main>
 
+<footer class="app-foot">
+  <span>World Aware Emergency Planning, Boulder, Colorado</span>
+  <a href="https://beworldaware.com">beworldaware.com</a>
+</footer>
+</div>
+
+<script src="js/icons.js"></script>
 <script>
 /* ── DATA ── */
 const HAZARDS = [
@@ -309,10 +262,18 @@ const QUESTIONS = {
   ],
 };
 
+
+/* ── ICONS (Lucide; replaces the emoji in HAZARDS[].icon, which is no longer rendered) ── */
+const HAZARD_ICON = { fire:'flame', flood:'waves', earthquake:'activity', tornado:'tornado', cyber:'shield-alert', power:'plug-zap', 'it-failure':'server', supply:'truck', 'key-person':'user-x', pandemic:'biohazard', 'active-shooter':'siren', 'data-breach':'lock-open' };
+const ic = (name, size, cls) => waIcon(name, size, cls);
+document.querySelectorAll('[data-ic]').forEach(el => { el.outerHTML = ic(el.dataset.ic, 16); });
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
 /* ── STATE ── */
 let currentHazard = null;
 let answers = {};
 let current = 0;
+const openDetails = new Set();
 
 function getQuestions() { return QUESTIONS[currentHazard.id] || []; }
 function getMaxScore() { return getQuestions().reduce((s,q) => s + q.w, 0); }
@@ -341,26 +302,39 @@ function getFlags() {
   return flags;
 }
 
+/* Score bands: thresholds unchanged (0.3 / 0.55 / 0.75 of the maximum). */
+function bandFor(pct) {
+  if (pct < 0.3)  return { cls:'low',      badge:'b-low',  lvl:1, word:'Low' };
+  if (pct < 0.55) return { cls:'medium',   badge:'b-mod',  lvl:2, word:'Moderate' };
+  if (pct < 0.75) return { cls:'high',     badge:'b-high', lvl:3, word:'High' };
+  return              { cls:'critical', badge:'b-crit', lvl:4, word:'Critical' };
+}
+function badgeHtml(b, text) {
+  return `<span class="badge ${b.badge}"><span class="meter" aria-hidden="true">${[1,2,3,4].map(i => `<i class="${i<=b.lvl?'f':''}"></i>`).join('')}</span>${esc(text || b.word)}</span>`;
+}
+
 /* ── HAZARD PICKER ── */
 function buildPicker() {
   const cats = [...new Set(HAZARDS.map(h => h.cat))];
   const list = document.getElementById('hazard-list');
   list.innerHTML = '';
   cats.forEach(cat => {
-    const label = document.createElement('div');
-    label.className = 'cat-label';
-    label.textContent = cat;
-    list.appendChild(label);
+    const block = document.createElement('section');
+    block.className = 'cat-block';
+    block.setAttribute('aria-label', cat);
+    block.innerHTML = `<h2 class="group-label">${esc(cat)}</h2>`;
     const grid = document.createElement('div');
-    grid.className = 'hazard-grid';
+    grid.className = 'hz-list';
     HAZARDS.filter(h => h.cat === cat).forEach(h => {
       const btn = document.createElement('button');
-      btn.className = 'hazard-btn';
-      btn.innerHTML = `<span class="h-icon">${h.icon}</span><div><div class="h-name">${h.name}</div><div class="h-cat">${h.cat}</div></div>`;
+      btn.type = 'button';
+      btn.className = 'hz-pick';
+      btn.innerHTML = `${ic(HAZARD_ICON[h.id] || 'circle-dashed', 20, 'hz-ic')}<span class="nm">${esc(h.name)}</span>${ic('chevron-right', 20, 'go')}`;
       btn.onclick = () => startAssessment(h);
       grid.appendChild(btn);
     });
-    list.appendChild(grid);
+    block.appendChild(grid);
+    list.appendChild(block);
   });
 }
 
@@ -368,15 +342,18 @@ function startAssessment(hazard) {
   currentHazard = hazard;
   answers = {};
   current = 0;
-  document.getElementById('assess-icon').textContent = hazard.icon;
+  openDetails.clear();
+  document.getElementById('assess-icon').innerHTML = ic(HAZARD_ICON[hazard.id] || 'circle-dashed', 24);
   document.getElementById('assess-title').textContent = hazard.name;
-  document.getElementById('assess-sub').textContent = '6 targeted impact questions · Aligned with your BCP priorities';
+  document.getElementById('assess-sub').textContent = '6 targeted impact questions, aligned with your BCP priorities';
   document.getElementById('score-panel').style.display = 'none';
   document.getElementById('result-wrap').innerHTML = '';
   document.getElementById('screen-pick').classList.remove('active');
   document.getElementById('screen-assess').classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
   render();
+  document.getElementById('assess-title').setAttribute('tabindex', '-1');
+  document.getElementById('assess-title').focus({preventScroll:true});
 }
 
 function goBack() {
@@ -394,41 +371,31 @@ function render() {
 
   qs.slice(0, current + 1).forEach((q, i) => {
     const ans = answers[i];
-    const isYes = ans === 'yes';
-    const isNo  = ans === 'no';
-    const isNa  = ans === 'na';
-    const card = document.createElement('div');
-    card.className = 'q-card' + (ans ? (isYes ? ' answered-yes' : isNa ? ' answered-na' : ' answered-no') : '');
+    const card = document.createElement('li');
+    card.className = 'q-card' + (ans ? ' answered' : '');
+    const open = openDetails.has(i);
+    const opt = (v, label) => `<button type="button" aria-pressed="${ans===v}" onclick="answer(${i},'${v}')">${label}</button>`;
     card.innerHTML = `
-      <div class="q-top">
-        <div class="q-text">${q.text}</div>
-        <span class="q-weight ${q.w >= 3 ? 'high' : ''}">weight ${q.w}</span>
+      <div class="q-top"><span class="q-n" aria-hidden="true">${ans ? waIcon('check', 16) : i + 1}</span><p class="q-text" id="q-${i}">${q.text}</p></div>
+      <div class="q-meta">
+        <span class="q-weight">Weight <b>${q.w}</b> of 3</span>
+        <button type="button" class="q-detail-btn" id="dtgl-${i}" aria-expanded="${open}" aria-controls="detail-${i}" onclick="toggleDetail(${i})">${ic('chevron-down', 16)}Why this matters for your BCP</button>
       </div>
-      <button class="q-detail-btn" id="dtgl-${i}" onclick="toggleDetail(${i})"><span class="arr">›</span> Why this matters for your BCP</button>
-      <div class="q-detail" id="detail-${i}">${q.detail}</div>
-      <div class="btn-row">
-        <button class="btn yes ${isYes?'sel':''}" onclick="answer(${i},'yes')">Yes</button>
-        <button class="btn no  ${isNo ?'sel':''}" onclick="answer(${i},'no')">No</button>
-        <button class="btn na  ${isNa ?'sel':''}" onclick="answer(${i},'na')">N/A</button>
-      </div>`;
+      <div class="q-detail ${open ? 'open' : ''}" id="detail-${i}">${q.detail}</div>
+      <div class="q-answer"><div class="seg" role="group" aria-labelledby="q-${i}">${opt('yes','Yes')}${opt('no','No')}${opt('na','N/A')}</div></div>`;
     wrap.appendChild(card);
-    if (i < current) {
-      const conn = document.createElement('div');
-      conn.className = 'connector';
-      conn.textContent = '↓';
-      wrap.appendChild(conn);
-    }
   });
 
   // Progress
   const pct = Math.round((answered / qs.length) * 100);
   document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-bar').setAttribute('aria-valuenow', answered);
   document.getElementById('progress-label').textContent = answered + ' of ' + qs.length + ' questions answered';
+  const sr = document.getElementById('score-running');
   if (answered > 0) {
-    const sr = document.getElementById('score-running');
     sr.style.display = 'block';
-    sr.textContent = 'Impact score: ' + calcScore() + '/' + getMaxScore();
-  }
+    sr.innerHTML = 'Impact score <b>' + calcScore() + '</b> of ' + getMaxScore();
+  } else { sr.style.display = 'none'; }
 
   if (answered === qs.length) { showScorePanel(); showResult(); }
   else { document.getElementById('score-panel').style.display = 'none'; document.getElementById('result-wrap').innerHTML = ''; }
@@ -437,36 +404,40 @@ function render() {
 function toggleDetail(i) {
   const d = document.getElementById('detail-' + i);
   const t = document.getElementById('dtgl-' + i);
-  d.classList.toggle('open');
-  t.classList.toggle('open');
+  const open = d.classList.toggle('open');
+  t.setAttribute('aria-expanded', open);
+  if (open) openDetails.add(i); else openDetails.delete(i);
 }
 
 function answer(idx, val) {
   answers[idx] = val;
-  if (idx === current && current < getQuestions().length - 1) {
-    current++;
+  const advanced = idx === current && current < getQuestions().length - 1;
+  if (advanced) current++;
+  render();
+  // Keep keyboard focus on the answered control, then bring the next question into view.
+  const btn = document.querySelector(`#questions-wrap li:nth-child(${idx + 1}) .seg button[aria-pressed="true"]`);
+  if (btn) btn.focus({preventScroll:true});
+  if (advanced) {
     setTimeout(() => {
       const cards = document.querySelectorAll('.q-card');
       const last = cards[cards.length - 1];
       if (last) last.scrollIntoView({behavior:'smooth',block:'center'});
     }, 100);
   }
-  render();
 }
 
 function showScorePanel() {
   const score = calcScore();
   const max = getMaxScore();
-  const pct = score / max;
-  const cls = pct < 0.3 ? '' : pct < 0.55 ? 'warn' : pct < 0.75 ? 'danger' : 'crit';
+  const b = bandFor(score / max);
   const panel = document.getElementById('score-panel');
   panel.style.display = 'block';
   panel.innerHTML = `
-    <div class="score-panel-label">Impact score — ${currentHazard.icon} ${currentHazard.name}</div>
-    <div class="pips">
-      ${Array.from({length: max}, (_,i) => `<div class="pip ${i < score ? 'active ' + cls : ''}"></div>`).join('')}
-      <span class="pip-label">${score} of ${max} impact points</span>
-    </div>`;
+    <div class="score-head">
+      <h2 class="section-title" style="margin:0">Impact score, ${esc(currentHazard.name)}</h2>
+      <span class="big">${score} <small>of ${max} impact points</small></span>
+    </div>
+    <div class="pips" aria-hidden="true">${Array.from({length: max}, (_,i) => `<i class="pip ${i < score ? 'active ' + b.badge : ''}"></i>`).join('')}</div>`;
 }
 
 function showResult() {
@@ -477,6 +448,7 @@ function showResult() {
   const highFlags = flags.filter(f => f.w >= 3);
   const medFlags  = flags.filter(f => f.w === 2);
   const h = currentHazard;
+  const b = bandFor(pct);
 
   let cls, badge, body;
   if (pct < 0.3) {
@@ -493,23 +465,24 @@ function showResult() {
     body = `A ${h.name.toLowerCase()} event represents a critical threat to your organization's continuity and survival. Multiple high-weight gaps have been identified. Immediate action on the flagged items and a comprehensive BCP engagement with World Aware is strongly recommended.`;
   }
 
+  const flagItem = (f, hi) => `<li class="${hi ? 'hi' : ''}">${ic(hi ? 'circle-alert' : 'triangle-alert', 16)}<span>${esc(f.text)}</span><span class="w">${hi ? 'High weight' : 'Medium weight'}</span></li>`;
   const flagHtml = flags.length > 0 ? `
-    <div class="result-flags">
-      ${highFlags.map(f => `<span class="flag red">${f.text}</span>`).join('')}
-      ${medFlags.map(f => `<span class="flag amber">${f.text}</span>`).join('')}
+    <div class="flags">
+      <h3>Gaps flagged (${flags.length})</h3>
+      <ul class="flag-list">${highFlags.map(f => flagItem(f, true)).join('')}${medFlags.map(f => flagItem(f, false)).join('')}</ul>
     </div>` : '';
 
   document.getElementById('result-wrap').innerHTML = `
-    <div class="connector">↓</div>
-    <div class="result-card ${cls}">
-      <span class="result-eyebrow">${badge} · Score ${score}/${max}</span>
-      <div class="result-title">${h.icon} ${h.name} Impact Assessment</div>
-      <div class="result-body">${body}</div>
+    <section class="result-card ${cls}">
+      <div class="result-top">${badgeHtml(b, badge)}<span class="muted" style="font-size:var(--text-sm)">Score ${score} of ${max}</span></div>
+      <h2 class="result-title">${esc(h.name)} impact assessment</h2>
+      <p class="result-body">${body}</p>
       ${flagHtml}
       <div class="result-coop">
-        Use the <strong>World Aware COOP/BCP Generator</strong> at <a href="https://plans.beworldaware.com" target="_blank">plans.beworldaware.com</a> to build a formal continuity plan that addresses these ${h.name.toLowerCase()} vulnerabilities — including IF-THEN response procedures, recovery checklists, and communication templates.
+        <p>Use the <strong>World Aware COOP/BCP Generator</strong> to build a formal continuity plan that addresses these ${esc(h.name.toLowerCase())} vulnerabilities, including IF-THEN response procedures, recovery checklists, and communication templates.</p>
+        <div><a class="btn btn-primary" href="https://plans.beworldaware.com" target="_blank" rel="noopener">${ic('file-plus-2', 20)}Open the plan builder</a></div>
       </div>
-    </div>`;
+    </section>`;
 }
 
 /* ── INIT ── */
