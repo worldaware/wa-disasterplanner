@@ -93,10 +93,10 @@ const ANNEXES = [
 
 function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2,6)}`; }
 function score(r)  { return r.likelihood * r.impact; }
-// Band thresholds are unchanged from the original app (Medium starts at 5).
+// Risk bands match the World Aware scale used across all tools: Low 1-5, Moderate 6-9, High 10-14, Critical 15-25.
 // Only the colors changed: one ordinal brand ramp, always shown with a word label and a meter.
-function levelOf(s){ if(s>=15)return{label:'Critical',cls:'b-crit',lvl:4}; if(s>=10)return{label:'High',cls:'b-high',lvl:3}; if(s>=5)return{label:'Medium',cls:'b-mod',lvl:2}; return{label:'Low',cls:'b-low',lvl:1}; }
-const BAND_ACTION = { Critical:'Act now', High:'Write a specific plan', Medium:'Cover in general preparedness', Low:'Monitor' };
+function levelOf(s){ if(s>=15)return{label:'Critical',cls:'b-crit',lvl:4}; if(s>=10)return{label:'High',cls:'b-high',lvl:3}; if(s>=6)return{label:'Moderate',cls:'b-mod',lvl:2}; return{label:'Low',cls:'b-low',lvl:1}; }
+const BAND_ACTION = { Critical:'Act now', High:'Write a specific plan', Moderate:'Cover in general preparedness', Low:'Monitor' };
 
 // Smart annex recommendation based on HIGH/CRITICAL risks (score ≥ 10)
 function computeRecommended(risks) {
@@ -506,7 +506,7 @@ function RiskMatrix({ risks, onChange, allHazards }) {
           </div>
           <p className="heat-tip" aria-live="polite">{tip || 'Tap, hover or focus a cell to see its score.'}</p>
           <div className="legend row4 mt-3 pt-3" style={{borderTop:'1px solid var(--color-border)'}}>
-            {[['Low','1 to 4',1],['Medium','5 to 9',5],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
+            {[['Low','1 to 5',1],['Moderate','6 to 9',6],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
           </div>
         </div>
 
@@ -549,8 +549,8 @@ function RiskMatrix({ risks, onChange, allHazards }) {
               ))}
             </ol>
             <div className="reg-foot">
-              {[{l:'Critical',min:15},{l:'High',min:10},{l:'Medium',min:5},{l:'Low',min:0}].map(({l}) => {
-                const n = sorted.filter(r => {const s=score(r); return l==='Critical'?s>=15:l==='High'?s>=10&&s<15:l==='Medium'?s>=5&&s<10:s<5;}).length;
+              {[{l:'Critical',min:15},{l:'High',min:10},{l:'Moderate',min:6},{l:'Low',min:0}].map(({l}) => {
+                const n = sorted.filter(r => {const s=score(r); return l==='Critical'?s>=15:l==='High'?s>=10&&s<15:l==='Moderate'?s>=6&&s<10:s<6;}).length;
                 if(!n) return null;
                 return <span key={l} className="flex items-center gap-2"><span className="num" style={{color:'var(--color-text)',fontSize:'var(--text-md)'}}>{n}</span>{l}</span>;
               })}
@@ -605,7 +605,7 @@ function PrintPreviewModal({ risks, onClose }) {
           </table>
           </div>
           <div className="legend row4 mt-5">
-            {[['Low','1 to 4',1],['Medium','5 to 9',5],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
+            {[['Low','1 to 5',1],['Moderate','6 to 9',6],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
           </div>
           <p className="help mt-5">World Aware Emergency Planning, <b style={{color:'var(--color-text-heading)'}}>beworldaware.com</b></p>
         </div>
@@ -626,10 +626,10 @@ const WA = {
   forest:'2F4A3C', cream:'F7EDD8', offwhite:'F9F4F4', ink:'201913', muted:'665B54', subtle:'837870',
   rule:'E4DCD6', band:'FAF6F3', white:'FFFFFF', danger:'A12623', dangerBg:'FFEFEC',
 };
-// Same thresholds as the app (Medium from 5). Fills are the brand risk ramp; the word is always printed.
+// Same thresholds as the app (Moderate from 6). Fills are the brand risk ramp; the word is always printed.
 const WA_RISK = {
   Low:      { fill:'FDCE95', ink:'201913' },
-  Medium:   { fill:'B97A14', ink:'201913' },
+  Moderate: { fill:'B97A14', ink:'201913' },
   High:     { fill:'9B3700', ink:'FFFFFF' },
   Critical: { fill:'631100', ink:'FFFFFF' },
 };
@@ -804,7 +804,7 @@ function waTable(cols, rows, o = {}) {
     rows:[...head, ...rows.map((r, i) => { const kn = rows.length <= 12 && i < rows.length - 1;
       return new TableRow({ cantSplit:true, children: r.map((v, j) => (v && v.__cell) ? (kn && v.__band ? riskCell(v.__band, v.__w, true) : v.__cell) : bodyCell(v, cols[j].width, i, { align:cols[j].align, bold:cols[j].bold, keepNext:kn })) }); })] });
 }
-const bandOf = s => s >= 15 ? 'Critical' : s >= 10 ? 'High' : s >= 5 ? 'Medium' : 'Low';
+const bandOf = s => s >= 15 ? 'Critical' : s >= 10 ? 'High' : s >= 6 ? 'Moderate' : 'Low';
 
 function riskTable(risks) {
   const { AlignmentType } = DX();
@@ -1213,8 +1213,8 @@ async function generateDocument(state) {
   const sortedRisks = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact));
   const critN  = sortedRisks.filter(r => r.likelihood * r.impact >= 15).length;
   const highN  = sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 10 && s < 15; }).length;
-  const medN   = sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 5 && s < 10; }).length;
-  const lowN   = sortedRisks.filter(r => r.likelihood * r.impact < 5).length;
+  const medN   = sortedRisks.filter(r => { const s = r.likelihood * r.impact; return s >= 6 && s < 10; }).length;
+  const lowN   = sortedRisks.filter(r => r.likelihood * r.impact < 6).length;
   const gaps   = [pr.hasExistingPlan === 'no', pr.hasBackupPower === 'no', pr.remoteWork === 'no', pr.hasOffsiteBackup === 'no'].filter(Boolean).length;
   const plural = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`;
 
@@ -1322,8 +1322,8 @@ async function generateDocument(state) {
     dbullet('Risk Score = Likelihood × Impact (range: 1–25)'),
     dspacer(120, 60),
     bandKeyTable([
-      ['1–4',   'Low',      'Monitor; maintain standard controls'],
-      ['5–9',   'Medium',   'Implement additional controls; include in annual review'],
+      ['1–5',   'Low',      'Monitor; maintain standard controls'],
+      ['6–9',   'Moderate',   'Implement additional controls; include in annual review'],
       ['10–14', 'High',     'Priority treatment; specific response plan required'],
       ['15–25', 'Critical', 'Immediate executive attention; dedicated annex required'],
     ]),
@@ -1333,8 +1333,8 @@ async function generateDocument(state) {
     twoColTable([
       ['Critical (15–25)', plural(critN, 'hazard')],
       ['High (10–14)',     plural(highN, 'hazard')],
-      ['Medium (5–9)',     plural(medN, 'hazard')],
-      ['Low (1–4)',        plural(lowN, 'hazard')],
+      ['Moderate (6–9)',     plural(medN, 'hazard')],
+      ['Low (1–5)',        plural(lowN, 'hazard')],
       ['Total assessed',   plural(risks.length, 'hazard')],
     ]),
 
