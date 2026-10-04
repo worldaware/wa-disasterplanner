@@ -504,7 +504,7 @@ function RiskMatrix({ risks, onChange, allHazards }) {
             {[1,2,3,4,5].map(l => <div key={l} className="ax" style={{gridColumn:l+2, gridRow:6}} aria-hidden="true"><span>{l}<small>{L_LABELS[l-1]}</small></span></div>)}
             <div className="xl" style={{gridRow:7}} aria-hidden="true">Likelihood</div>
           </div>
-          <p className="heat-tip" aria-live="polite">{tip || 'Hover or focus a cell to see its score.'}</p>
+          <p className="heat-tip" aria-live="polite">{tip || 'Tap, hover or focus a cell to see its score.'}</p>
           <div className="legend row4 mt-3 pt-3" style={{borderTop:'1px solid var(--color-border)'}}>
             {[['Low','1 to 4',1],['Medium','5 to 9',5],['High','10 to 14',10],['Critical','15 to 25',15]].map(([l,range,s]) => <div key={l}><RiskBadge s={s}/><span className="r">Score {range}</span></div>)}
           </div>
@@ -628,8 +628,8 @@ const WA = {
 };
 // Same thresholds as the app (Medium from 5). Fills are the brand risk ramp; the word is always printed.
 const WA_RISK = {
-  Low:      { fill:'E4AB5F', ink:'201913' },
-  Medium:   { fill:'C76D14', ink:'201913' },
+  Low:      { fill:'FDCE95', ink:'201913' },
+  Medium:   { fill:'B97A14', ink:'201913' },
   High:     { fill:'9B3700', ink:'FFFFFF' },
   Critical: { fill:'631100', ink:'FFFFFF' },
 };
@@ -681,10 +681,20 @@ const waTableBorders = () => { const { BorderStyle } = DX(); const n = waNil(); 
 const CELL_M = { top:100, bottom:100, left:120, right:120 };
 
 // Text runs: anything in [SQUARE BRACKETS] becomes a WA Placeholder run (consultant completes it in Word).
+// Procedure steps and checklist bullets in the content library leave a field blank as "Label: ", "Label: ." or
+// "Label:  — next". Only those rows (opts.blanks) get a [TO BE COMPLETED] placeholder; ordinary sentences that end
+// in a colon to introduce a list or table are left alone.
+function fillBlanks(t) {
+  return t.replace(/:\s*\.?\s*$/, ': [TO BE COMPLETED]')
+          .replace(/:\s+(—|\.)/g, ': [TO BE COMPLETED] $1')
+          .replace(/:\s{2,}(?=[A-Za-z])/g, ': [TO BE COMPLETED] ');
+}
 function runs(text, opts = {}) {
   const { TextRun } = DX();
-  // Steps that end in "Label: " or "Label: ." in the content library have an empty field; show it as a placeholder.
-  const s = (text == null ? '' : String(text)).replace(/:\s*\.?\s*$/, ': [TO BE COMPLETED]').replace(/:\s+(—|\.)/g, ': [TO BE COMPLETED] $1');
+  const { blanks, ...ro } = opts;
+  let s = text == null ? '' : String(text);
+  if(blanks) s = fillBlanks(s);
+  opts = ro;
   const parts = s.split(/(\[[^\]]+\])/g).filter(x => x !== '');
   if(!parts.length) return [new TextRun({ text:'', ...opts })];
   return parts.map(p => /^\[[^\]]+\]$/.test(p) ? new TextRun({ text:p, style:'WAPlaceholder', bold:opts.bold }) : new TextRun({ text:p, ...opts }));
@@ -710,17 +720,19 @@ function sentence(t) {
 }
 
 // ── Doc primitives (names unchanged so the annex library below works as before) ──
-function dp(text, opts = {}) { const { Paragraph } = DX(); return new Paragraph({ children: runs(text, opts) }); }
+// A sentence ending in a colon introduces the list or table after it, so keep the two on the same page.
+function dp(text, opts = {}) { const { Paragraph } = DX(); return new Paragraph({ keepNext: /:\s*$/.test(String(text)), children: runs(text, opts) }); }
 function dh1(text, o = {}) {
   const { Paragraph, TextRun, HeadingLevel } = DX();
   const out = [];
-  if(o.eyebrow) out.push(new Paragraph({ style:'WAEyebrow', pageBreakBefore:!!o.pageBreak, children:[new TextRun(o.eyebrow)] }));
+  // Sections that do not start a new page get generous space above so they still read as a new chapter.
+  if(o.eyebrow) out.push(new Paragraph({ style:'WAEyebrow', pageBreakBefore:!!o.pageBreak, spacing: o.pageBreak ? undefined : { before:600, after:40 }, children:[new TextRun(o.eyebrow)] }));
   out.push(new Paragraph({ heading:HeadingLevel.HEADING_1, pageBreakBefore:!!o.pageBreak && !o.eyebrow, children:[new TextRun(sentence(text))] }));
   return out;
 }
 function dh2(text) { const { Paragraph, TextRun, HeadingLevel } = DX(); return new Paragraph({ heading:HeadingLevel.HEADING_2, children:[new TextRun(sentence(text))] }); }
 function dh3(text) { const { Paragraph, TextRun, HeadingLevel } = DX(); return new Paragraph({ heading:HeadingLevel.HEADING_3, children:[new TextRun(sentence(text))] }); }
-function dbullet(text) { const { Paragraph } = DX(); return new Paragraph({ numbering:{ reference:'wa-bullets', level:0 }, spacing:{ after:60 }, children: runs(text) }); }
+function dbullet(text) { const { Paragraph } = DX(); return new Paragraph({ numbering:{ reference:'wa-bullets', level:0 }, spacing:{ after:60 }, children: runs(text, { blanks:true }) }); }
 function dnote(text) { const { Paragraph } = DX(); return new Paragraph({ style:'WASmall', children: runs(text) }); }
 function dspacer(before = 160, after = 160) { const { Paragraph, TextRun } = DX(); return new Paragraph({ spacing:{ before:Math.round(before/2), after:Math.round(after/2), line:120, lineRule:DX().LineRuleType.AUTO }, children:[new TextRun({ text:'', size:4 })] }); }
 function dph(label) { const { TextRun } = DX(); return new TextRun({ text:`[${label}]`, style:'WAPlaceholder' }); }
@@ -746,7 +758,7 @@ function difthen(ifText, steps) {
       new Paragraph({ style:'WACalloutLabel', children:[new TextRun('If')] }),
       new Paragraph({ spacing:{ after:140 }, children: runs(ifText.charAt(0).toUpperCase() + ifText.slice(1), { bold:true }) }),
       new Paragraph({ style:'WACalloutLabel', children:[new TextRun('Then')] }),
-      ...steps.map(s => new Paragraph({ numbering:{ reference:'wa-steps', level:0, instance }, spacing:{ after:60 }, children: runs(s) })),
+      ...steps.map(s => new Paragraph({ numbering:{ reference:'wa-steps', level:0, instance }, spacing:{ after:60 }, children: runs(s, { blanks:true }) })),
     ],
   });
   return [
@@ -771,24 +783,26 @@ function waNote(label, text, tone) {
 function headCell(text, width, align) {
   const { TableCell, Paragraph, TextRun, WidthType, ShadingType, VerticalAlign, AlignmentType } = DX();
   return new TableCell({ width:{ size:width, type:WidthType.DXA }, shading:{ type:ShadingType.CLEAR, color:'auto', fill:WA.maroon }, margins:CELL_M, verticalAlign:VerticalAlign.BOTTOM,
-    children:[new Paragraph({ style:'WATableHead', alignment: align || AlignmentType.LEFT, children:[new TextRun(text)] })] });
+    children:[new Paragraph({ style:'WATableHead', keepNext:true, alignment: align || AlignmentType.LEFT, children:[new TextRun(text)] })] });
 }
 function bodyCell(content, width, row, o = {}) {
   const { TableCell, Paragraph, WidthType, ShadingType, VerticalAlign, AlignmentType } = DX();
   const children = Array.isArray(content) ? content : runs(content == null || content === '' ? '—' : content, { bold:o.bold, color:o.color });
   return new TableCell({ width:{ size:width, type:WidthType.DXA }, shading:{ type:ShadingType.CLEAR, color:'auto', fill: o.fill || (row % 2 ? WA.band : WA.white) }, margins:CELL_M, verticalAlign:VerticalAlign.CENTER,
-    children:[new Paragraph({ style:'WATableText', alignment: o.align || AlignmentType.LEFT, children })] });
+    children:[new Paragraph({ style:'WATableText', keepNext: !!o.keepNext, alignment: o.align || AlignmentType.LEFT, children })] });
 }
-function riskCell(label, width) {
+function riskCell(label, width, keepNext) {
   const { TextRun } = DX();
   const b = WA_RISK[label];
-  return bodyCell([new TextRun({ text:label, bold:true, color:b.ink })], width, 0, { fill:b.fill });
+  return bodyCell([new TextRun({ text:label, bold:true, color:b.ink })], width, 0, { fill:b.fill, keepNext });
 }
 function waTable(cols, rows, o = {}) {
   const { Table, TableRow, WidthType, TableLayoutType } = DX();
   const head = o.noHead ? [] : [new TableRow({ tableHeader:true, cantSplit:true, children: cols.map(c => headCell(c.title, c.width, c.align)) })];
   return new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths: cols.map(c => c.width), layout:TableLayoutType.FIXED, borders:waTableBorders(),
-    rows:[...head, ...rows.map((r, i) => new TableRow({ cantSplit:true, children: r.map((v, j) => (v && v.__cell) ? v.__cell : bodyCell(v, cols[j].width, i, { align:cols[j].align, bold:cols[j].bold })) }))] });
+    // Short tables (12 rows or fewer) are kept on one page: keep-with-next on every row but the last.
+    rows:[...head, ...rows.map((r, i) => { const kn = rows.length <= 12 && i < rows.length - 1;
+      return new TableRow({ cantSplit:true, children: r.map((v, j) => (v && v.__cell) ? (kn && v.__band ? riskCell(v.__band, v.__w, true) : v.__cell) : bodyCell(v, cols[j].width, i, { align:cols[j].align, bold:cols[j].bold, keepNext:kn })) }); })] });
 }
 const bandOf = s => s >= 15 ? 'Critical' : s >= 10 ? 'High' : s >= 5 ? 'Medium' : 'Low';
 
@@ -798,7 +812,7 @@ function riskTable(risks) {
   const cols = [ {title:'#',width:500}, {title:'Hazard',width:2700,bold:true}, {title:'Likelihood',width:1500}, {title:'Impact',width:1500}, {title:'Score',width:900,bold:true}, {title:'Risk band',width:2260} ];
   return waTable(cols, sorted.map((r, idx) => {
     const s = r.likelihood * r.impact;
-    return [ `${idx + 1}`, r.name, `${r.likelihood}, ${L_LABELS[r.likelihood - 1]}`, `${r.impact}, ${I_LABELS[r.impact - 1]}`, `${s}`, { __cell: riskCell(bandOf(s), 2260) } ];
+    return [ `${idx + 1}`, r.name, `${r.likelihood}, ${L_LABELS[r.likelihood - 1]}`, `${r.impact}, ${I_LABELS[r.impact - 1]}`, `${s}`, { __cell: riskCell(bandOf(s), 2260), __band: bandOf(s), __w: 2260 } ];
   }));
 }
 // Label / value table. opts.header: first row is a column header (maroon row).
@@ -815,7 +829,7 @@ function functionsTable(fns) {
 }
 function bandKeyTable(rows) {
   const cols = [ {title:'Score',width:1300,bold:true}, {title:'Risk band',width:1800}, {title:'Treatment',width:6260} ];
-  return waTable(cols, rows.map(([range, band, action]) => [ range, { __cell: riskCell(band, 1800) }, action ]));
+  return waTable(cols, rows.map(([range, band, action]) => [ range, { __cell: riskCell(band, 1800), __band: band, __w: 1800 }, action ]));
 }
 
 // ── Annex content library ──────────────────────────────────────────────────────
@@ -1152,17 +1166,27 @@ function waFooter(versionLabel) {
   ] })] });
 }
 function waCover({ logo, client, industry, dateText, version, preparedBy }) {
-  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel } = DX();
+  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, HeadingLevel, ShadingType } = DX();
   const n = waNil(); const hair = { style:BorderStyle.SINGLE, size:4, color:WA.rule };
   const metaRow = (k, v) => new TableRow({ children:[
     new TableCell({ width:{ size:2200, type:WidthType.DXA }, margins:{ top:100, bottom:100, left:0, right:120 }, children:[new Paragraph({ spacing:{ after:0 }, children:[new TextRun({ text:k, size:18, bold:true, color:WA.muted })] })] }),
     new TableCell({ width:{ size:7160, type:WidthType.DXA }, margins:{ top:100, bottom:100, left:120, right:0 }, children:[new Paragraph({ spacing:{ after:0 }, children: runs(v) })] }),
   ] });
   return [
-    new Paragraph({ spacing:{ after:2400 }, children:[ logoRun(logo, 260, 60) ] }),
-    new Paragraph({ spacing:{ after:160 }, border:{ top:{ style:BorderStyle.SINGLE, size:24, color:WA.amber, space:18 } }, children:[new TextRun({ text:'Business Continuity Plan', size:30, bold:true, color:WA.amber6 })] }),
-    new Paragraph({ heading:HeadingLevel.TITLE, children: runs(client) }),
-    new Paragraph({ style:'WALead', spacing:{ after:1600 }, children: runs(industry) }),
+    new Paragraph({ spacing:{ after:1800 }, children:[ logoRun(logo, 260, 60) ] }),
+    // Title block: cream panel with a heavy amber band on top, so the client name carries the page.
+    new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths:[CW], borders:waNoBorders(), rows:[new TableRow({ cantSplit:true, children:[new TableCell({
+      width:{ size:CW, type:WidthType.DXA },
+      shading:{ type:ShadingType.CLEAR, color:'auto', fill:WA.cream },
+      margins:{ top:480, bottom:520, left:440, right:440 },
+      borders:{ top:{ style:BorderStyle.SINGLE, size:48, color:WA.amber }, bottom:n, left:n, right:n },
+      children:[
+        new Paragraph({ spacing:{ after:200 }, children:[new TextRun({ text:'Business Continuity Plan', size:30, bold:true, color:WA.amber6 })] }),
+        new Paragraph({ heading:HeadingLevel.TITLE, spacing:{ after:160 }, children: runs(client) }),
+        new Paragraph({ style:'WALead', spacing:{ after:0 }, children: runs(industry) }),
+      ],
+    })] })] }),
+    new Paragraph({ spacing:{ before:0, after:1000 }, children:[new TextRun('')] }),
     new Table({ width:{ size:CW, type:WidthType.DXA }, columnWidths:[2200, 7160], borders:{ top:hair, bottom:hair, left:n, right:n, insideHorizontal:hair, insideVertical:n }, rows:[
       metaRow('Date', dateText), metaRow('Version', version), metaRow('Prepared by', preparedBy), metaRow('Contact', 'beworldaware.com'),
     ] }),
@@ -1200,7 +1224,9 @@ async function generateDocument(state) {
   const logo = await loadLogo();
   const tocLine = (k, label) => new Paragraph({ spacing:{ before:80, after:80 }, tabStops:[{ type:TabStopType.LEFT, position:900 }], children:[
     new TextRun({ text:k, bold:true, color:WA.amber6 }), new TextRun({ text:'\t' + sentence(label) }) ] });
-  const sec = (n, title) => dh1(title, { eyebrow:`Section ${n}`, pageBreak:true });
+  // Page breaks only before the executive summary and each annex; other sections flow on
+  // so short section endings do not leave near-empty pages.
+  const sec = (n, title) => dh1(title, { eyebrow:`Section ${n}`, pageBreak: n === 1 });
 
   const body = [
     // ── CONTENTS ──
@@ -1230,7 +1256,7 @@ async function generateDocument(state) {
     dh2('Top Priority Risks'),
     ...(sortedRisks.length ? [waTable(
       [ {title:'Hazard',width:5000,bold:true}, {title:'Score',width:1600,bold:true}, {title:'Risk band',width:2760} ],
-      sortedRisks.slice(0, 5).map(r => { const s = r.likelihood * r.impact; return [ r.name, `${s}`, { __cell: riskCell(bandOf(s), 2760) } ]; })
+      sortedRisks.slice(0, 5).map(r => { const s = r.likelihood * r.impact; return [ r.name, `${s}`, { __cell: riskCell(bandOf(s), 2760), __band: bandOf(s), __w: 2760 } ]; })
     )] : [dp('[No risks rated yet]')]),
 
     // ── SECTION 2: INTRODUCTION & PURPOSE ──
@@ -1459,7 +1485,7 @@ function StepConfig({ config, onChange, risks, errors }) {
             {ANNEXES.map(a => (
               <Checkbox key={a.id} checked={config.selectedAnnexes.includes(a.id)} onChange={() => toggleAnnex(a.id)}>
                 <span style={{flex:1,minWidth:0}}>
-                  <span className="ttl"><Icon name={a.icon} className="hz-ic"/>{a.title}{recommended.includes(a.id) && <span className="tag">Recommended</span>}</span>
+                  <span className="ttl ttl-ic"><Icon name={a.icon} className="hz-ic"/><span className="tt">{a.title}{recommended.includes(a.id) && <span className="tag">Recommended</span>}</span></span>
                   <span className="d">{a.subtitle}</span>
                 </span>
               </Checkbox>

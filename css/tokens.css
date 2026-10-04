@@ -108,15 +108,15 @@
         Colour is never the only signal: every band also shows its word
         label and the 4-segment level meter (1-4 segments filled).
      ------------------------------------------------------------------ */
-  --risk-low:          #E4AB5F;   /* score 1-5   */
-  --risk-moderate:     #C76D14;   /* score 6-9   */
+  --risk-low:          #FDCE95;   /* score 1-4 (amber-200; lightened so Low and Medium read apart) */
+  --risk-moderate:     #B97A14;   /* score 5-9 (brand amber) */
   --risk-high:         #9B3700;   /* score 10-14 */
   --risk-critical:     #631100;   /* score 15-25 */
   --risk-unrated:      var(--stone-300);
 
   /* Ink to print ON each band fill (all AA for text >=14px bold) */
-  --risk-low-ink:      var(--stone-900);  /* 8.5:1 */
-  --risk-moderate-ink: var(--stone-900);  /* 4.7:1 */
+  --risk-low-ink:      var(--stone-900);  /* 11.9:1 */
+  --risk-moderate-ink: var(--stone-900);  /* 4.8:1 */
   --risk-high-ink:     #FFFFFF;           /* 7.1:1 */
   --risk-critical-ink: #FFFFFF;           /* 13.0:1 */
 
